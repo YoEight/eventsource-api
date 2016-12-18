@@ -27,8 +27,10 @@ library:
   default-extensions:
     - NoImplicitPrelude
   dependencies:
-  - base >=4.9 && <5
-  - classy-prelude ==1.0.*
+    - base >=4.9 && <5
+    - classy-prelude ==1.0.*
+    - uuid
+    - aeson
   source-dirs: library
 license: BSD3
 maintainer: Yorick Laupa
