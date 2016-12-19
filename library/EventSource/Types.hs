@@ -55,6 +55,10 @@ instance Monoid Properties where
   mappend (Properties a) (Properties b) = Properties $ mappend a b
 
 --------------------------------------------------------------------------------
+instance Show Properties where
+  show (Properties m) = show m
+
+--------------------------------------------------------------------------------
 -- | Retrieves a value associated with the given key.
 property :: MonadPlus m => Text -> Properties -> m Text
 property k (Properties m) =
