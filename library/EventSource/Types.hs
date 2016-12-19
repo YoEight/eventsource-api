@@ -45,6 +45,34 @@ dataAsJson :: FromJSON a => Data -> Either String a
 dataAsJson = eitherDecodeStrict . dataAsBytes
 
 --------------------------------------------------------------------------------
+-- | Used to store a set a properties. One example is to be used as 'Event'
+--   metadata.
+newtype Properties = Properties (Map Text Text)
+
+--------------------------------------------------------------------------------
+instance Monoid Properties where
+  mempty = Properties mempty
+  mappend (Properties a) (Properties b) = Properties $ mappend a b
+
+--------------------------------------------------------------------------------
+-- | Retrieves a value associated with the given key.
+property :: MonadPlus m => Text -> Properties -> m Text
+property k (Properties m) =
+  case lookup k m of
+    Nothing -> mzero
+    Just v -> return v
+
+--------------------------------------------------------------------------------
+-- | Adds a pair of key-value into given 'Properties'.
+setProperty :: Text -> Text -> Properties -> Properties
+setProperty key value (Properties m) = Properties $ insertMap key value m
+
+--------------------------------------------------------------------------------
+-- | Returns all associated key-value pairs as a list.
+properties :: Properties -> [(Text, Text)]
+properties (Properties m) = mapToList m
+
+--------------------------------------------------------------------------------
 -- | Used to identify an event.
 newtype EventId = EventId UUID deriving (Eq, Ord)
 
@@ -75,7 +103,7 @@ data Event =
   Event { eventType :: EventType
         , eventId :: EventId
         , eventPayload :: Data
-        , eventMetadata :: Data
+        , eventMetadata :: Maybe Properties
         }
 
 --------------------------------------------------------------------------------
