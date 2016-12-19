@@ -93,3 +93,21 @@ forEvents store stream k = loop $ startFrom 0
             then return ()
             else loop nextBatch
         ReadFailure e -> throwError $ ForEventReadFailure e
+
+--------------------------------------------------------------------------------
+-- | Like 'forEvents' but expose signature similar to 'foldl'.
+foldEvents :: (MonadIO m, DecodeEvent a)
+           => Store
+           -> StreamName
+           -> (s -> a -> s)
+           -> s
+           -> ExceptT ForEventFailure m s
+foldEvents store stream k seed = mapExceptT trans action
+  where
+    trans m = evalStateT m seed
+
+    action = do
+      put seed
+      forEvents store stream $ \a ->
+        modify $ \s -> k s a
+      get
