@@ -12,6 +12,9 @@
 module EventSource.Types where
 
 --------------------------------------------------------------------------------
+import Data.Foldable
+
+--------------------------------------------------------------------------------
 import ClassyPrelude
 import Data.Aeson
 import Data.UUID hiding (fromString)
@@ -67,6 +70,11 @@ property k (Properties m) =
     Just v -> return v
 
 --------------------------------------------------------------------------------
+-- | Builds a 'Properties' with a single pair of key-value.
+singleton :: Text -> Text -> Properties
+singleton k v = setProperty k v mempty
+
+--------------------------------------------------------------------------------
 -- | Adds a pair of key-value into given 'Properties'.
 setProperty :: Text -> Text -> Properties -> Properties
 setProperty key value (Properties m) = Properties $ insertMap key value m
@@ -90,6 +98,18 @@ freshEventId :: IO EventId
 freshEventId = fmap EventId nextRandom
 
 --------------------------------------------------------------------------------
+-- | Represents a stream name.
+newtype StreamName = StreamName Text deriving Eq
+
+--------------------------------------------------------------------------------
+instance Show StreamName where
+  show (StreamName s) = show s
+
+--------------------------------------------------------------------------------
+instance IsString StreamName where
+  fromString = StreamName . fromString
+
+--------------------------------------------------------------------------------
 -- | Used to identity the type of an 'Event'.
 newtype EventType = EventType Text deriving Eq
 
@@ -111,14 +131,37 @@ data Event =
         }
 
 --------------------------------------------------------------------------------
--- | Encodes a data object into an 'Event'.
+-- | Represents an event that's saved into the event store.
+data SavedEvent =
+  SavedEvent { eventNumber :: Int32
+             , savedEvent :: Event
+             }
+
+--------------------------------------------------------------------------------
+data Slice =
+  Slice { sliceEvents :: [SavedEvent]
+        , sliceEndOfStream :: Bool
+        , sliceNextEventNumber :: Int32
+        }
+
+--------------------------------------------------------------------------------
+-- | Encodes a data object into an 'Event'. 'encodeEvent' get passed an
+--   'EventId' in a case where a fresh id is needed.
 class EncodeEvent a where
   encodeEvent :: a -> EventId -> Event
+
+--------------------------------------------------------------------------------
+instance EncodeEvent Event where
+  encodeEvent = const
 
 --------------------------------------------------------------------------------
 -- | Decodes an 'Event' into a data object.
 class DecodeEvent a where
   decodeEvent :: Event -> Either Text a
+
+--------------------------------------------------------------------------------
+instance DecodeEvent Event where
+  decodeEvent = Right
 
 --------------------------------------------------------------------------------
 -- | The purpose of 'ExpectedVersion' is to make sure a certain stream state is
@@ -132,3 +175,32 @@ data ExpectedVersion
     -- Stream should exist.
   | ExactVersion Int32
     -- Stream should be at givent event number.
+
+--------------------------------------------------------------------------------
+-- | Statuses you can get on every read attempt.
+data ReadStatus a
+  = ReadSuccess a
+  | StreamNotFound
+  | ReadError (Maybe Text)
+  | AccessDenied Text
+
+--------------------------------------------------------------------------------
+instance Functor ReadStatus where
+  fmap f (ReadSuccess a)  = ReadSuccess $ f a
+  fmap _ StreamNotFound   = StreamNotFound
+  fmap _ (ReadError e)    = ReadError e
+  fmap _ (AccessDenied e) = AccessDenied e
+
+--------------------------------------------------------------------------------
+instance Foldable ReadStatus where
+  foldMap f (ReadSuccess a) = f a
+  foldMap _ _               = mempty
+
+--------------------------------------------------------------------------------
+instance Traversable ReadStatus where
+  traverse f (ReadSuccess a)  = fmap ReadSuccess $ f a
+  traverse _ StreamNotFound   = pure StreamNotFound
+  traverse _ (ReadError e)    = pure $ ReadError e
+  traverse _ (AccessDenied e) = pure $ AccessDenied e
+
+--------------------------------------------------------------------------------

@@ -31,6 +31,7 @@ library:
     - classy-prelude ==1.0.*
     - uuid
     - aeson
+    - mtl
   source-dirs: library
 license: BSD3
 maintainer: Yorick Laupa
