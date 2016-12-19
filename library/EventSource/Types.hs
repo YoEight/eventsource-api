@@ -180,16 +180,19 @@ data ExpectedVersion
 -- | Statuses you can get on every read attempt.
 data ReadStatus a
   = ReadSuccess a
-  | StreamNotFound
+  | ReadFailure ReadFailure
+
+--------------------------------------------------------------------------------
+-- | Represents the different kind of failure you can get when reading.
+data ReadFailure
+  = StreamNotFound
   | ReadError (Maybe Text)
   | AccessDenied Text
 
 --------------------------------------------------------------------------------
 instance Functor ReadStatus where
   fmap f (ReadSuccess a)  = ReadSuccess $ f a
-  fmap _ StreamNotFound   = StreamNotFound
-  fmap _ (ReadError e)    = ReadError e
-  fmap _ (AccessDenied e) = AccessDenied e
+  fmap _ (ReadFailure e)  = ReadFailure e
 
 --------------------------------------------------------------------------------
 instance Foldable ReadStatus where
@@ -198,9 +201,5 @@ instance Foldable ReadStatus where
 
 --------------------------------------------------------------------------------
 instance Traversable ReadStatus where
-  traverse f (ReadSuccess a)  = fmap ReadSuccess $ f a
-  traverse _ StreamNotFound   = pure StreamNotFound
-  traverse _ (ReadError e)    = pure $ ReadError e
-  traverse _ (AccessDenied e) = pure $ AccessDenied e
-
---------------------------------------------------------------------------------
+  traverse f (ReadSuccess a) = fmap ReadSuccess $ f a
+  traverse _ (ReadFailure e) = pure $ ReadFailure e

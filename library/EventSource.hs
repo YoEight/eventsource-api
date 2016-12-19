@@ -1,4 +1,5 @@
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE Rank2Types       #-}
 --------------------------------------------------------------------------------
 -- |
 -- Module : EventSource
@@ -14,17 +15,22 @@ module EventSource where
 
 --------------------------------------------------------------------------------
 import ClassyPrelude
+import Control.Monad.Except
 import Control.Monad.State
 
 --------------------------------------------------------------------------------
 import EventSource.Types
 
 --------------------------------------------------------------------------------
--- | Represents a range of value given a starting point to end one.
-data Range =
-  Range { rangeFrom :: Int32
-        , rangeTo :: Int32
+-- | Represents batch information needed to read a stream.
+data Batch =
+  Batch { batchFrom :: Int32
+        , batchSize :: Int32
         }
+
+--------------------------------------------------------------------------------
+startFrom :: Int32 -> Batch
+startFrom from = Batch from 500
 
 --------------------------------------------------------------------------------
 -- | Main event store abstraction. It exposes essential features expected from
@@ -39,16 +45,39 @@ data Store =
 
         , readBatch :: forall m. MonadIO m
                     => StreamName
-                    -> Range
+                    -> Batch
                     -> m (ReadStatus Slice)
           -- ^ Reads a batch of events, in a forward direction, on a stream.
 
         }
 
 --------------------------------------------------------------------------------
+-- | Represents failures that can occurs when using 'forEvents'.
+data ForEventFailure
+  = ForEventReadFailure ReadFailure
+  | ForEventDecodeFailure Text
+
+--------------------------------------------------------------------------------
+-- | Iterates over all events of stream given a starting point and a batch size.
 forEvents :: (MonadState s m, MonadIO m, DecodeEvent a)
           => Store
           -> StreamName
           -> (a -> m ())
-          -> m ()
-forEvents = undefined
+          -> ExceptT ForEventFailure m ()
+forEvents store stream k = loop $ startFrom 0
+  where
+    loop batch = do
+      res <- readBatch store stream batch
+      case res of
+        ReadSuccess slice -> do
+          for_ (sliceEvents slice) $ \s ->
+            case decodeEvent $ savedEvent s of
+              Left e -> throwError $ ForEventDecodeFailure e
+              Right a -> lift $ k a
+
+          let nextBatch = batch { batchFrom = sliceNextEventNumber slice }
+
+          if sliceEndOfStream slice
+            then return ()
+            else loop nextBatch
+        ReadFailure e -> throwError $ ForEventReadFailure e
