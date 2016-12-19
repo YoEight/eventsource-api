@@ -29,8 +29,17 @@ data Batch =
         }
 
 --------------------------------------------------------------------------------
+-- | Starts a 'Batch' from a given point. The batch size is set to default,
+--   which is 500.
 startFrom :: Int32 -> Batch
 startFrom from = Batch from 500
+
+--------------------------------------------------------------------------------
+-- | A subscription allows to be notified on every change occuring on a stream.
+newtype Subscription =
+  Subscription { foldSub :: forall a m. (DecodeEvent a, MonadIO m)
+                         => (a -> m ())
+                         -> m () }
 
 --------------------------------------------------------------------------------
 -- | Main event store abstraction. It exposes essential features expected from
@@ -48,6 +57,9 @@ data Store =
                     -> Batch
                     -> m (ReadStatus Slice)
           -- ^ Reads a batch of events, in a forward direction, on a stream.
+
+        , subscribe :: forall m. MonadIO m => StreamName -> m Subscription
+          -- ^ Subscribes to given stream.
 
         }
 
