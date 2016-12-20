@@ -46,11 +46,11 @@ newtype Subscription =
 --   'SomeException' is used because we let the underlying subscription model
 --   exposed its own 'Exception'. If the callback that handles incoming events
 --   throws an exception, it will not be catch by the error callback.
-foldSub :: DecodeEvent a
+foldSub :: (DecodeEvent a, MonadIO m)
         => Subscription
-        -> (a -> IO ())
-        -> (SomeException -> IO ())
-        -> IO ()
+        -> (a -> m ())
+        -> (SomeException -> m ())
+        -> m ()
 foldSub sub onEvent onError = loop
   where
     loop = do
