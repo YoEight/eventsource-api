@@ -72,29 +72,29 @@ foldSubAsync sub onEvent onError =
 --------------------------------------------------------------------------------
 -- | Main event store abstraction. It exposes essential features expected from
 --   an event store.
-data Store =
-  Store { appendEvents :: forall a m. (EncodeEvent a, MonadIO m)
-                       => StreamName
-                       -> ExpectedVersion
-                       -> [a]
-                       -> m ()
-          -- ^ Appends a batch of events at the end of a stream.
+class Store store where
+  -- | Appends a batch of events at the end of a stream.
+  appendEvents :: (EncodeEvent a, MonadIO m)
+               => store
+               -> StreamName
+               -> ExpectedVersion
+               -> [a]
+               -> m ()
 
-        , readBatch :: forall m. MonadIO m
-                    => StreamName
-                    -> Batch
-                    -> m (ReadStatus Slice)
-          -- ^ Reads a batch of events, in a forward direction, on a stream.
+  -- | Appends a batch of events at the end of a stream.
+  readBatch :: MonadIO m
+            => store
+            -> StreamName
+            -> Batch
+            -> m (ReadStatus Slice)
 
-        , subscribe :: forall m. MonadIO m => StreamName -> m Subscription
-          -- ^ Subscribes to given stream.
-
-        }
+  -- | Subscribes to given stream.
+  subscribe :: MonadIO m => store -> StreamName -> m Subscription
 
 --------------------------------------------------------------------------------
 -- | Appends a single event at the end of a stream.
-appendEvent :: (EncodeEvent a, MonadIO m)
-            => Store
+appendEvent :: (EncodeEvent a, MonadIO m, Store store)
+            => store
             -> StreamName
             -> ExpectedVersion
             -> a
@@ -109,8 +109,8 @@ data ForEventFailure
 
 --------------------------------------------------------------------------------
 -- | Iterates over all events of stream given a starting point and a batch size.
-forEvents :: (MonadState s m, MonadIO m, DecodeEvent a)
-          => Store
+forEvents :: (MonadIO m, DecodeEvent a, Store store)
+          => store
           -> StreamName
           -> (a -> m ())
           -> ExceptT ForEventFailure m ()
@@ -134,8 +134,8 @@ forEvents store stream k = loop $ startFrom 0
 
 --------------------------------------------------------------------------------
 -- | Like 'forEvents' but expose signature similar to 'foldl'.
-foldEventsM :: (MonadIO m, DecodeEvent a)
-            => Store
+foldEventsM :: (MonadIO m, DecodeEvent a, Store store)
+            => store
             -> StreamName
             -> (s -> a -> m s)
             -> s
@@ -153,8 +153,8 @@ foldEventsM store stream k seed = mapExceptT trans action
 
 --------------------------------------------------------------------------------
 -- | Like 'foldEventsM' but expose signature similar to 'foldM'.
-foldEvents :: (MonadIO m, DecodeEvent a)
-           => Store
+foldEvents :: (MonadIO m, DecodeEvent a, Store store)
+           => store
            -> StreamName
            -> (s -> a -> s)
            -> s
