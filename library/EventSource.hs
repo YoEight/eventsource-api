@@ -124,17 +124,30 @@ forEvents store stream k = loop $ startFrom 0
 
 --------------------------------------------------------------------------------
 -- | Like 'forEvents' but expose signature similar to 'foldl'.
+foldEventsM :: (MonadIO m, DecodeEvent a)
+            => Store
+            -> StreamName
+            -> (s -> a -> m s)
+            -> s
+            -> ExceptT ForEventFailure m s
+foldEventsM store stream k seed = mapExceptT trans action
+  where
+    trans m = evalStateT m seed
+
+    action = do
+      forEvents store stream $ \a -> do
+        s <- get
+        s' <- lift $ k s a
+        put s'
+      get
+
+--------------------------------------------------------------------------------
+-- | Like 'foldEventsM' but expose signature similar to 'foldM'.
 foldEvents :: (MonadIO m, DecodeEvent a)
            => Store
            -> StreamName
            -> (s -> a -> s)
            -> s
            -> ExceptT ForEventFailure m s
-foldEvents store stream k seed = mapExceptT trans action
-  where
-    trans m = evalStateT m seed
-
-    action = do
-      forEvents store stream $ \a ->
-        modify $ \s -> k s a
-      get
+foldEvents store stream k seed =
+  foldEventsM store stream (\s a -> return $ k s a) seed
