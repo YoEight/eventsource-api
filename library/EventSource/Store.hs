@@ -1,5 +1,6 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE Rank2Types       #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE Rank2Types                #-}
 --------------------------------------------------------------------------------
 -- |
 -- Module : EventSource.Store
@@ -70,6 +71,16 @@ foldSubAsync sub onEvent onError =
   async $ foldSub sub onEvent onError
 
 --------------------------------------------------------------------------------
+data ExpectedVersionException
+  = ExpectedVersionException
+    { versionExceptionExpected :: ExpectedVersion
+    , versionExceptionActual :: ExpectedVersion
+    } deriving Show
+
+--------------------------------------------------------------------------------
+instance Exception ExpectedVersionException
+
+--------------------------------------------------------------------------------
 -- | Main event store abstraction. It exposes essential features expected from
 --   an event store.
 class Store store where
@@ -90,6 +101,16 @@ class Store store where
 
   -- | Subscribes to given stream.
   subscribe :: MonadIO m => store -> StreamName -> m Subscription
+
+--------------------------------------------------------------------------------
+-- | Utility type to pass any store that implements 'Store' typeclass.
+data SomeStore = forall store. Store store => SomeStore store
+
+--------------------------------------------------------------------------------
+instance Store SomeStore where
+  appendEvents (SomeStore store) = appendEvents store
+  readBatch (SomeStore store)    = readBatch store
+  subscribe (SomeStore store)    = subscribe store
 
 --------------------------------------------------------------------------------
 -- | Appends a single event at the end of a stream.

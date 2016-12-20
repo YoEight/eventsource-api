@@ -94,12 +94,12 @@ instance Show EventId where
 
 --------------------------------------------------------------------------------
 -- | Generates a fresh 'EventId'.
-freshEventId :: IO EventId
-freshEventId = fmap EventId nextRandom
+freshEventId :: MonadIO m => m EventId
+freshEventId = fmap EventId $ liftIO nextRandom
 
 --------------------------------------------------------------------------------
 -- | Represents a stream name.
-newtype StreamName = StreamName Text deriving Eq
+newtype StreamName = StreamName Text deriving (Eq, Ord)
 
 --------------------------------------------------------------------------------
 instance Show StreamName where
@@ -160,6 +160,12 @@ class DecodeEvent a where
   decodeEvent :: Event -> Either Text a
 
 --------------------------------------------------------------------------------
+newtype DecodeEventException = DecodeEventException Text deriving Show
+
+--------------------------------------------------------------------------------
+instance Exception DecodeEventException
+
+--------------------------------------------------------------------------------
 instance DecodeEvent Event where
   decodeEvent = Right
 
@@ -175,6 +181,7 @@ data ExpectedVersion
     -- Stream should exist.
   | ExactVersion Int32
     -- Stream should be at givent event number.
+  deriving Show
 
 --------------------------------------------------------------------------------
 -- | Statuses you can get on every read attempt.
