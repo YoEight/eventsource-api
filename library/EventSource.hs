@@ -37,9 +37,37 @@ startFrom from = Batch from 500
 --------------------------------------------------------------------------------
 -- | A subscription allows to be notified on every change occuring on a stream.
 newtype Subscription =
-  Subscription { foldSub :: forall a m. (DecodeEvent a, MonadIO m)
-                         => (a -> m ())
-                         -> m () }
+  Subscription { nextEvent :: forall a m. (DecodeEvent a, MonadIO m)
+                           => m (Either SomeException a) }
+
+--------------------------------------------------------------------------------
+-- | Folds over every event coming from the subscription until the end of the
+--   universe, unless an 'Exception' raises from the subscription.
+--   'SomeException' is used because we let the underlying subscription model
+--   exposed its own 'Exception'. If the callback that handles incoming events
+--   throws an exception, it will not be catch by the error callback.
+foldSub :: DecodeEvent a
+        => Subscription
+        -> (a -> IO ())
+        -> (SomeException -> IO ())
+        -> IO ()
+foldSub sub onEvent onError = loop
+  where
+    loop = do
+      res <- nextEvent sub
+      case res of
+        Left e -> onError e
+        Right a -> onEvent a >> loop
+
+--------------------------------------------------------------------------------
+-- | Asynchronous version of 'foldSub'.
+foldSubAsync :: DecodeEvent a
+             => Subscription
+             -> (a -> IO ())
+             -> (SomeException -> IO ())
+             -> IO (Async ())
+foldSubAsync sub onEvent onError =
+  async $ foldSub sub onEvent onError
 
 --------------------------------------------------------------------------------
 -- | Main event store abstraction. It exposes essential features expected from
