@@ -92,6 +92,16 @@ data Store =
         }
 
 --------------------------------------------------------------------------------
+-- | Appends a single event at the end of a stream.
+appendEvent :: (EncodeEvent a, MonadIO m)
+            => Store
+            -> StreamName
+            -> ExpectedVersion
+            -> a
+            -> m ()
+appendEvent store stream ver a = appendEvents store stream ver [a]
+
+--------------------------------------------------------------------------------
 -- | Represents failures that can occurs when using 'forEvents'.
 data ForEventFailure
   = ForEventReadFailure ReadFailure
