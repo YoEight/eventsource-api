@@ -135,7 +135,6 @@ foldEvents store stream k seed = mapExceptT trans action
     trans m = evalStateT m seed
 
     action = do
-      put seed
       forEvents store stream $ \a ->
         modify $ \s -> k s a
       get
