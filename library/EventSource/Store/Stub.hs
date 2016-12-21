@@ -17,6 +17,7 @@ module EventSource.Store.Stub
   , StubStore
   , newStub
   , streams
+  , subscriptionIds
   ) where
 
 --------------------------------------------------------------------------------
@@ -52,6 +53,15 @@ newStub = StubStore <$> newIORef mempty <*> newIORef mempty
 -- | Returns current 'StubStore' streams state.
 streams :: StubStore -> IO (Map StreamName Stream)
 streams StubStore{..} = readIORef _streams
+
+--------------------------------------------------------------------------------
+-- | Returns all subscriptions a stream has.
+subscriptionIds :: StubStore -> StreamName -> IO [SubscriptionId]
+subscriptionIds StubStore{..} name = do
+  subMap <- readIORef _subs
+  case lookup name subMap of
+    Nothing -> return []
+    Just subs -> return $ keys subs
 
 --------------------------------------------------------------------------------
 appendStream :: [Event] -> Stream -> Stream
@@ -151,7 +161,7 @@ instance Store StubStore where
             return $ Right saved
 
     subMap <- liftIO $ readIORef _subs
-    let _F Nothing   = Just $ singletonMap sid  chan
+    let _F Nothing  = Just $ singletonMap sid  chan
         _F (Just m) = Just $ insertMap sid chan m
 
         nextSubMap = alterMap _F name subMap
