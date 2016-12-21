@@ -35,11 +35,12 @@ data Stream =
 
 --------------------------------------------------------------------------------
 type Sub = TChan SavedEvent
+type Subs = Map SubscriptionId Sub
 
 --------------------------------------------------------------------------------
 data StubStore =
   StubStore { _streams :: IORef (Map StreamName Stream)
-            , _subs :: IORef (Map StreamName (Seq Sub))
+            , _subs :: IORef (Map StreamName Subs)
             }
 
 --------------------------------------------------------------------------------
@@ -144,14 +145,14 @@ instance Store StubStore where
 
   subscribe StubStore{..} name = do
     chan <- liftIO newTChanIO
-    let sub = Subscription $ atomically $ do
+    sid <- freshSubscriptionId
+    let sub = Subscription sid $ atomically $ do
             saved <- readTChan chan
-            let res = decodeEvent $ savedEvent saved
-            return $ first (toException . DecodeEventException) res
+            return $ Right saved
 
     subMap <- liftIO $ readIORef _subs
-    let _F Nothing   = Just $ singleton chan
-        _F (Just xs) = Just $ snoc xs chan
+    let _F Nothing   = Just $ singletonMap sid  chan
+        _F (Just m) = Just $ insertMap sid chan m
 
         nextSubMap = alterMap _F name subMap
 

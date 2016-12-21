@@ -18,6 +18,8 @@ module EventSource.Store where
 import ClassyPrelude
 import Control.Monad.Except
 import Control.Monad.State
+import Data.UUID
+import Data.UUID.V4
 
 --------------------------------------------------------------------------------
 import EventSource.Types
@@ -36,10 +38,37 @@ startFrom :: Int32 -> Batch
 startFrom from = Batch from 500
 
 --------------------------------------------------------------------------------
+-- | Represents a subscription id.
+newtype SubscriptionId = SubscriptionId UUID deriving (Eq, Ord, Show)
+
+--------------------------------------------------------------------------------
+-- | Returns a fresh subscription id.
+freshSubscriptionId :: MonadIO m => m SubscriptionId
+freshSubscriptionId = liftIO $ fmap SubscriptionId nextRandom
+
+--------------------------------------------------------------------------------
 -- | A subscription allows to be notified on every change occuring on a stream.
-newtype Subscription =
-  Subscription { nextEvent :: forall a m. (DecodeEvent a, MonadIO m)
-                           => m (Either SomeException a) }
+data Subscription =
+  Subscription { subscriptionId :: SubscriptionId
+
+               , nextEvent :: forall m. MonadIO m
+                           => m (Either SomeException SavedEvent)
+               }
+
+--------------------------------------------------------------------------------
+-- | Waits for the next event and deserializes it on the go.
+nextEventAs :: (DecodeEvent a, MonadIO m)
+            => Subscription
+            -> m (Either SomeException a)
+nextEventAs sub = do
+  res <- nextEvent sub
+  let action = do
+        event <- res
+        first (toException . DecodeEventException)
+          $ decodeEvent
+          $ savedEvent event
+
+  return action
 
 --------------------------------------------------------------------------------
 -- | Folds over every event coming from the subscription until the end of the
@@ -55,7 +84,7 @@ foldSub :: (DecodeEvent a, MonadIO m)
 foldSub sub onEvent onError = loop
   where
     loop = do
-      res <- nextEvent sub
+      res <- nextEventAs sub
       case res of
         Left e -> onError e
         Right a -> onEvent a >> loop
