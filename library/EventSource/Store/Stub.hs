@@ -30,8 +30,8 @@ import EventSource.Types hiding (singleton)
 --------------------------------------------------------------------------------
 -- | Holds stream state data.
 data Stream =
-  Stream { _streamNextNumber :: Int32
-         , _streamEvents :: Seq SavedEvent
+  Stream { streamNextNumber :: Int32
+         , streamEvents :: Seq SavedEvent
          }
 
 --------------------------------------------------------------------------------
@@ -68,10 +68,10 @@ appendStream :: [Event] -> Stream -> Stream
 appendStream = flip $ foldl' go
   where
     go s e =
-      let num = _streamNextNumber s
-          evts = _streamEvents s in
-      s { _streamNextNumber = num + 1
-        , _streamEvents = snoc evts (SavedEvent num e)
+      let num = streamNextNumber s
+          evts = streamEvents s in
+      s { streamNextNumber = num + 1
+        , streamEvents = snoc evts (SavedEvent num e)
         }
 
 --------------------------------------------------------------------------------
@@ -118,12 +118,12 @@ instance Store StubStore where
         liftIO $ notifySubs self name saved
 
       Just stream -> do
-        let currentNumber = _streamNextNumber stream
+        let currentNumber = streamNextNumber stream
         case ver of
           NoStream ->
             liftIO $ throwIO $ ExpectedVersionException ver StreamExists
           ExactVersion v ->
-            unless (v == _streamNextNumber stream - 1)
+            unless (v == streamNextNumber stream - 1)
               $ liftIO
               $ throwIO
               $ ExpectedVersionException ver (ExactVersion currentNumber)
@@ -145,10 +145,10 @@ instance Store StubStore where
     case lookup name streamMap of
       Nothing -> return $ ReadFailure StreamNotFound
       Just stream -> do
-        let events = filter ((>= from) . eventNumber) $ _streamEvents stream
+        let events = filter ((>= from) . eventNumber) $ streamEvents stream
             slice = Slice { sliceEvents = toList events
                           , sliceEndOfStream = True
-                          , sliceNextEventNumber = _streamNextNumber stream
+                          , sliceNextEventNumber = streamNextNumber stream
                           }
 
         return $ ReadSuccess slice
