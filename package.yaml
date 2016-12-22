@@ -32,6 +32,7 @@ library:
     - uuid
     - aeson
     - mtl
+    - containers
   source-dirs: library
 license: BSD3
 maintainer: Yorick Laupa
@@ -44,6 +45,8 @@ tests:
     - eventsource-api
     - tasty
     - tasty-hspec
+    - classy-prelude
+    - aeson
     ghc-options:
     - -rtsopts
     - -threaded

@@ -1,4 +1,5 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 --------------------------------------------------------------------------------
 -- |
 -- Module : EventSource.Store.Stub
@@ -18,10 +19,13 @@ module EventSource.Store.Stub
   , newStub
   , streams
   , subscriptionIds
+  , lastStreamEvent
   ) where
 
 --------------------------------------------------------------------------------
 import ClassyPrelude
+import Control.Monad.State.Strict
+import Data.Sequence hiding (filter)
 
 --------------------------------------------------------------------------------
 import EventSource.Store
@@ -53,6 +57,18 @@ newStub = StubStore <$> newIORef mempty <*> newIORef mempty
 -- | Returns current 'StubStore' streams state.
 streams :: StubStore -> IO (Map StreamName Stream)
 streams StubStore{..} = readIORef _streams
+
+--------------------------------------------------------------------------------
+-- | Returns the last event of stream.
+lastStreamEvent :: StubStore -> StreamName -> IO (Maybe SavedEvent)
+lastStreamEvent stub name = do
+  streamMap <- streams stub
+  return (go =<< lookup name streamMap)
+    where
+      go stream =
+        case viewr $ streamEvents stream of
+          EmptyR -> Nothing
+          _ :> e -> Just e
 
 --------------------------------------------------------------------------------
 -- | Returns all subscriptions a stream has.
@@ -88,12 +104,23 @@ notifySubs StubStore{..} name events = do
         writeTChan sub e
 
 --------------------------------------------------------------------------------
+buildEvent :: (EncodeEvent a, MonadIO m) => a -> m Event
+buildEvent a = do
+  eid <- freshEventId
+  let start = Event { eventType = ""
+                    , eventId = eid
+                    , eventPayload = dataFromBytes ""
+                    , eventMetadata = Nothing
+                    }
+
+  return $ execState (encodeEvent a) start
+
+--------------------------------------------------------------------------------
 instance Store StubStore where
   appendEvents self@StubStore{..} name ver xs = do
-    events <- for xs $ \a ->
-                fmap (encodeEvent a) freshEventId
-
+    events <- traverse buildEvent xs
     streamMap <- liftIO $ readIORef _streams
+
     case lookup name streamMap of
       Nothing -> do
         case ver of

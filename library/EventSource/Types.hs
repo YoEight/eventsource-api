@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 --------------------------------------------------------------------------------
 -- |
 -- Module : EventSource.Types
@@ -16,7 +17,9 @@ import Data.Foldable
 
 --------------------------------------------------------------------------------
 import ClassyPrelude
+import Control.Monad.State.Strict
 import Data.Aeson
+import Data.Aeson.Types
 import Data.UUID hiding (fromString)
 import Data.UUID.V4
 
@@ -26,6 +29,33 @@ newtype Data = Data ByteString
 --------------------------------------------------------------------------------
 instance Show Data where
   show _ = "Data(*Binary data*)"
+
+--------------------------------------------------------------------------------
+-- | Sometimes, having to implement a 'FromJSON' instance isn't flexible enough.
+--   'JsonParsing' allow to pass parameters when parsing from a JSON value while
+--   remaining composable.
+newtype JsonParsing a = JsonParsing (Value -> Parser a)
+
+--------------------------------------------------------------------------------
+instance Functor JsonParsing where
+  fmap f (JsonParsing k) = JsonParsing $ \v -> f <$> k v
+
+--------------------------------------------------------------------------------
+instance Applicative JsonParsing where
+  pure a = JsonParsing $ \_ -> return a
+
+  (JsonParsing kf) <*> (JsonParsing ka) =
+    JsonParsing $ \v ->
+      kf v <*> ka v
+
+--------------------------------------------------------------------------------
+instance Monad JsonParsing where
+  return = pure
+
+  JsonParsing k >>= f = JsonParsing $ \v -> do
+    a <- k v
+    let JsonParsing km = f a
+    km v
 
 --------------------------------------------------------------------------------
 -- | Returns 'Data' content as a 'ByteString'.
@@ -44,8 +74,15 @@ dataFromJson = dataFromBytes . toStrict . encode
 
 --------------------------------------------------------------------------------
 -- | Returns 'Data' content as any value that implements 'FromJSON' type-class.
-dataAsJson :: FromJSON a => Data -> Either String a
-dataAsJson = eitherDecodeStrict . dataAsBytes
+dataAsJson :: FromJSON a => Data -> Either Text a
+dataAsJson = first pack . eitherDecodeStrict . dataAsBytes
+
+--------------------------------------------------------------------------------
+-- | Uses a 'JsonParsing' comuputation to extract a value.
+dataAsParsing :: Data -> JsonParsing a -> Either Text a
+dataAsParsing dat (JsonParsing k) = do
+  value <- dataAsJson dat
+  first pack $ parseEither k value
 
 --------------------------------------------------------------------------------
 -- | Used to store a set a properties. One example is to be used as 'Event'
@@ -122,20 +159,40 @@ instance IsString EventType where
   fromString = EventType . fromString
 
 --------------------------------------------------------------------------------
+-- | Sets 'EventType' for an 'Event'.
+setEventType :: EventType -> State Event ()
+setEventType typ = modify $ \s -> s { eventType = typ }
+
+--------------------------------------------------------------------------------
+-- | Sets 'Eventid' for an 'Event'.
+setEventId :: EventId -> State Event ()
+setEventId eid = modify $ \s -> s { eventId = eid }
+
+--------------------------------------------------------------------------------
+-- | Sets a payload for an 'Event'.
+setEventPayload :: Data -> State Event ()
+setEventPayload dat = modify $ \s -> s { eventPayload = dat }
+
+--------------------------------------------------------------------------------
+-- | Sets metadata for an 'Event'.
+setEventMetadata :: Properties -> State Event ()
+setEventMetadata props = modify $ \s -> s { eventMetadata = Just props }
+
+--------------------------------------------------------------------------------
 -- | Encapsulates an event which is about to be saved.
 data Event =
   Event { eventType :: EventType
         , eventId :: EventId
         , eventPayload :: Data
         , eventMetadata :: Maybe Properties
-        }
+        } deriving Show
 
 --------------------------------------------------------------------------------
 -- | Represents an event that's saved into the event store.
 data SavedEvent =
   SavedEvent { eventNumber :: Int32
              , savedEvent :: Event
-             }
+             } deriving Show
 
 --------------------------------------------------------------------------------
 data Slice =
@@ -148,11 +205,7 @@ data Slice =
 -- | Encodes a data object into an 'Event'. 'encodeEvent' get passed an
 --   'EventId' in a case where a fresh id is needed.
 class EncodeEvent a where
-  encodeEvent :: a -> EventId -> Event
-
---------------------------------------------------------------------------------
-instance EncodeEvent Event where
-  encodeEvent = const
+  encodeEvent :: a -> State Event ()
 
 --------------------------------------------------------------------------------
 -- | Decodes an 'Event' into a data object.
