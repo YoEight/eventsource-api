@@ -211,3 +211,90 @@ foldEvents :: (MonadIO m, DecodeEvent a, Store store)
            -> ExceptT ForEventFailure m s
 foldEvents store stream k seed =
   foldEventsM store stream (\s a -> return $ k s a) seed
+
+--------------------------------------------------------------------------------
+-- | Allows to easily iterate over a stream's events.
+newtype StreamIterator =
+  StreamIterator { iteratorNext :: forall m. MonadIO m => m (Maybe SavedEvent) }
+
+--------------------------------------------------------------------------------
+-- | Reads the next available event from the 'StreamIterator' and try to
+--   deserialize it at the same time.
+iteratorNextEvent :: (DecodeEvent a, MonadIO m, MonadPlus m)
+                  => StreamIterator
+                  -> m (Maybe a)
+iteratorNextEvent i = do
+  res <- iteratorNext i
+  case res of
+    Nothing -> return Nothing
+    Just s ->
+      case decodeEvent $ savedEvent s of
+        Left _ -> mzero
+        Right a -> return $ Just a
+
+--------------------------------------------------------------------------------
+-- | Returns a 'StreamIterator' for the given stream name. The returned
+--   'StreamIterator' can be consumed threadsafely.
+streamIterator :: (Store store, MonadIO m)
+               => store
+               -> StreamName
+               -> m (ReadStatus StreamIterator)
+streamIterator store name = do
+  res <- readBatch store name (startFrom 0)
+  for res $ \slice -> do
+    var <- liftIO $ newTVarIO $ IteratorOverAvailable slice
+    return $ StreamIterator $ iterateOver store var name
+
+--------------------------------------------------------------------------------
+data IteratorOverState
+  = IteratorOverAvailable Slice
+  | IteratorOverPending
+  | IteratorOverClosed
+
+--------------------------------------------------------------------------------
+data IteratorOverAction
+  = IteratorOverEvent SavedEvent
+  | IteratorOverNextBatch Int32
+  | IteratorOverEndOfStream
+
+--------------------------------------------------------------------------------
+iterateOver :: (Store store, MonadIO m)
+            => store
+            -> TVar IteratorOverState
+            -> StreamName
+            -> m (Maybe SavedEvent)
+iterateOver store var name = go
+  where
+    go = do
+      action <- atomically $ do
+        st <- readTVar var
+        case st of
+          IteratorOverAvailable slice -> do
+            case sliceEvents slice of
+              e:es -> do
+                let nextSlice = slice { sliceEvents = es }
+                writeTVar var $ IteratorOverAvailable nextSlice
+                return $ IteratorOverEvent e
+              [] | sliceEndOfStream slice
+                   -> do
+                     writeTVar var IteratorOverClosed
+                     return IteratorOverEndOfStream
+                 | otherwise
+                   -> do
+                     writeTVar var IteratorOverPending
+                     return $ IteratorOverNextBatch $ sliceNextEventNumber slice
+          IteratorOverPending -> retrySTM
+          IteratorOverClosed -> return IteratorOverEndOfStream
+
+      case action of
+        IteratorOverEvent e -> return $ Just e
+        IteratorOverEndOfStream -> return Nothing
+        IteratorOverNextBatch num -> do
+          res <- readBatch store name (startFrom num)
+          case res of
+            ReadFailure _ -> do
+              atomically $ writeTVar var IteratorOverClosed
+              return Nothing
+            ReadSuccess slice -> do
+              atomically $ writeTVar var $ IteratorOverAvailable slice
+              go
