@@ -15,29 +15,14 @@ module Test.EventSource.Store.Stub (test) where
 
 --------------------------------------------------------------------------------
 import ClassyPrelude
-import Data.Aeson
 import EventSource
 import EventSource.Store.Stub
 import Test.Tasty (TestTree)
 import Test.Tasty.Hspec
 
 --------------------------------------------------------------------------------
-newtype TestEvent = TestEvent Int deriving (Eq, Show)
-
---------------------------------------------------------------------------------
-instance EncodeEvent TestEvent where
-  encodeEvent (TestEvent v) = do
-    setEventType "test-event"
-    setEventPayload $ dataFromJson $ object [ "value" .= v ]
-
---------------------------------------------------------------------------------
-instance DecodeEvent TestEvent where
-  decodeEvent Event{..} = do
-    unless (eventType == "test-event") $
-      Left "Wrong event type"
-
-    dataAsParse eventPayload $ withObject "" $ \o ->
-      fmap TestEvent (o .: "value")
+import           Test.EventSource.Event
+import qualified Test.EventSource.Store.Api as Api
 
 --------------------------------------------------------------------------------
 test :: IO TestTree
@@ -84,3 +69,5 @@ spec = parallel $ do
 
     let Right got = res
     got `shouldBe` expected
+
+  Api.spec stub

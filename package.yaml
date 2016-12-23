@@ -50,6 +50,7 @@ tests:
     - tasty-hspec
     - classy-prelude
     - aeson
+    - mtl
     ghc-options:
     - -rtsopts
     - -threaded

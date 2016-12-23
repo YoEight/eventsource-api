@@ -156,6 +156,7 @@ appendEvent store stream ver a = appendEvents store stream ver [a]
 data ForEventFailure
   = ForEventReadFailure ReadFailure
   | ForEventDecodeFailure Text
+  deriving Show
 
 --------------------------------------------------------------------------------
 -- | Iterates over all events of stream given a starting point and a batch size.
