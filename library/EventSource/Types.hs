@@ -85,6 +85,11 @@ dataAsParsing dat (JsonParsing k) = do
   first pack $ parseEither k value
 
 --------------------------------------------------------------------------------
+-- | Like 'dataAsParsing' but doesn't require you to use 'JsonParsing'.
+dataAsParse :: Data -> (Value -> Parser a) -> Either Text a
+dataAsParse dat k = dataAsParsing dat $ JsonParsing k
+
+--------------------------------------------------------------------------------
 -- | Used to store a set a properties. One example is to be used as 'Event'
 --   metadata.
 newtype Properties = Properties (Map Text Text)
@@ -241,6 +246,19 @@ data ExpectedVersion
 data ReadStatus a
   = ReadSuccess a
   | ReadFailure ReadFailure
+  deriving Show
+
+--------------------------------------------------------------------------------
+-- | Returns 'True' is 'ReadStatus' is a 'ReadSuccess'.
+isReadSuccess :: ReadStatus a -> Bool
+isReadSuccess (ReadSuccess _) = True
+isReadSuccess _ = False
+
+--------------------------------------------------------------------------------
+-- | Returns 'False' is 'ReadStatus' is a 'ReadFailure'.
+isReadFailure :: ReadStatus a -> Bool
+isReadFailure (ReadFailure _) = True
+isReadFailure _ = False
 
 --------------------------------------------------------------------------------
 -- | Represents the different kind of failure you can get when reading.
@@ -248,6 +266,7 @@ data ReadFailure
   = StreamNotFound
   | ReadError (Maybe Text)
   | AccessDenied Text
+  deriving Show
 
 --------------------------------------------------------------------------------
 instance Functor ReadStatus where

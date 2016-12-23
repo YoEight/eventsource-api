@@ -218,6 +218,10 @@ newtype StreamIterator =
   StreamIterator { iteratorNext :: forall m. MonadIO m => m (Maybe SavedEvent) }
 
 --------------------------------------------------------------------------------
+instance Show StreamIterator where
+  show _ = "StreamIterator"
+
+--------------------------------------------------------------------------------
 -- | Reads the next available event from the 'StreamIterator' and try to
 --   deserialize it at the same time.
 iteratorNextEvent :: (DecodeEvent a, MonadIO m, MonadPlus m)
