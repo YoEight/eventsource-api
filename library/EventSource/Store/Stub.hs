@@ -25,7 +25,7 @@ module EventSource.Store.Stub
 --------------------------------------------------------------------------------
 import ClassyPrelude
 import Control.Monad.State.Strict
-import Data.Sequence hiding (filter)
+import Data.Sequence hiding (filter, zip)
 
 --------------------------------------------------------------------------------
 import EventSource.Store
@@ -141,7 +141,7 @@ instance Store StubStore where
 
           -- This part is already performed in 'appendStream' but difficult
           -- to take its logic apart from building 'SavedEvent's.
-          let saved = SavedEvent <$> [0..] <*> events
+          let saved = uncurry SavedEvent <$> zip [0..] events
           notifySubs self name saved
 
         Just stream -> do
@@ -163,7 +163,7 @@ instance Store StubStore where
 
           -- This part is already performed in 'appendStream' but difficult
           -- to take its logic apart from building 'SavedEvent's.
-          let saved = SavedEvent <$> [currentNumber..] <*> events
+          let saved = uncurry SavedEvent <$> zip [currentNumber..] events
           notifySubs self name saved
 
   readBatch StubStore{..} name (Batch from _) = atomically $ do
