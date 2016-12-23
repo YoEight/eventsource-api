@@ -233,6 +233,26 @@ iteratorNextEvent i = do
         Right a -> return $ Just a
 
 --------------------------------------------------------------------------------
+-- | Reads all events from the 'StreamIterator' until reaching end of stream.
+iteratorReadAll :: MonadIO m => StreamIterator -> m [SavedEvent]
+iteratorReadAll i = do
+  res <- iteratorNext i
+  case res of
+    Nothing -> return []
+    Just s -> fmap (s:) $ iteratorReadAll i
+
+--------------------------------------------------------------------------------
+-- | Like 'iteratorReadAll' but try to deserialize the events at the same time.
+iteratorReadAllEvents :: (DecodeEvent a, MonadIO m, MonadPlus m)
+                      => StreamIterator
+                      -> m [a]
+iteratorReadAllEvents i = do
+  res <- iteratorNextEvent i
+  case res of
+    Nothing -> return []
+    Just a -> fmap (a:) $ iteratorReadAllEvents i
+
+--------------------------------------------------------------------------------
 -- | Returns a 'StreamIterator' for the given stream name. The returned
 --   'StreamIterator' can be consumed threadsafely.
 streamIterator :: (Store store, MonadIO m)
