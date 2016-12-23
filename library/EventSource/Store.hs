@@ -164,26 +164,21 @@ forEvents :: (MonadIO m, DecodeEvent a, Store store)
           -> StreamName
           -> (a -> m ())
           -> ExceptT ForEventFailure m ()
-forEvents store stream k = loop $ startFrom 0
+forEvents store name k = do
+  res <- streamIterator store name
+  case res of
+    ReadSuccess i -> loop i
+    ReadFailure e -> throwError $ ForEventReadFailure e
   where
-    loop batch = do
-      res <- readBatch store stream batch
-      case res of
-        ReadSuccess slice -> do
-          for_ (sliceEvents slice) $ \s ->
-            case decodeEvent $ savedEvent s of
-              Left e -> throwError $ ForEventDecodeFailure e
-              Right a -> lift $ k a
-
-          let nextBatch = batch { batchFrom = sliceNextEventNumber slice }
-
-          if sliceEndOfStream slice
-            then return ()
-            else loop nextBatch
-        ReadFailure e -> throwError $ ForEventReadFailure e
+    loop i = do
+      opt <- iteratorNext i
+      for_ opt $ \saved ->
+        case decodeEvent $ savedEvent saved of
+          Left e -> throwError $ ForEventDecodeFailure e
+          Right a -> lift (k a) >> loop i
 
 --------------------------------------------------------------------------------
--- | Like 'forEvents' but expose signature similar to 'foldl'.
+-- | Like 'forEvents' but expose signature similar to 'foldM'.
 foldEventsM :: (MonadIO m, DecodeEvent a, Store store)
             => store
             -> StreamName
@@ -202,7 +197,7 @@ foldEventsM store stream k seed = mapExceptT trans action
       get
 
 --------------------------------------------------------------------------------
--- | Like 'foldEventsM' but expose signature similar to 'foldM'.
+-- | Like 'foldEventsM' but expose signature similar to 'foldl'.
 foldEvents :: (MonadIO m, DecodeEvent a, Store store)
            => store
            -> StreamName
@@ -258,7 +253,7 @@ iteratorReadAllEvents i = do
 
 --------------------------------------------------------------------------------
 -- | Returns a 'StreamIterator' for the given stream name. The returned
---   'StreamIterator' can be consumed threadsafely.
+--   'StreamIterator' IS NOT THREADSAFE.
 streamIterator :: (Store store, MonadIO m)
                => store
                -> StreamName
@@ -266,13 +261,12 @@ streamIterator :: (Store store, MonadIO m)
 streamIterator store name = do
   res <- readBatch store name (startFrom 0)
   for res $ \slice -> do
-    var <- liftIO $ newTVarIO $ IteratorOverAvailable slice
-    return $ StreamIterator $ iterateOver store var name
+    ref <- liftIO $ newIORef $ IteratorOverAvailable slice
+    return $ StreamIterator $ iterateOver store ref name
 
 --------------------------------------------------------------------------------
 data IteratorOverState
   = IteratorOverAvailable Slice
-  | IteratorOverPending
   | IteratorOverClosed
 
 --------------------------------------------------------------------------------
@@ -284,31 +278,27 @@ data IteratorOverAction
 --------------------------------------------------------------------------------
 iterateOver :: (Store store, MonadIO m)
             => store
-            -> TVar IteratorOverState
+            -> IORef IteratorOverState
             -> StreamName
             -> m (Maybe SavedEvent)
-iterateOver store var name = go
+iterateOver store ref name = go
   where
     go = do
-      action <- atomically $ do
-        st <- readTVar var
+      action <- liftIO $ atomicModifyIORef' ref $ \st ->
         case st of
-          IteratorOverAvailable slice -> do
+          IteratorOverAvailable slice ->
             case sliceEvents slice of
-              e:es -> do
+              e:es ->
                 let nextSlice = slice { sliceEvents = es }
-                writeTVar var $ IteratorOverAvailable nextSlice
-                return $ IteratorOverEvent e
+                    nxtSt = IteratorOverAvailable nextSlice in
+                (nxtSt, IteratorOverEvent e)
               [] | sliceEndOfStream slice
-                   -> do
-                     writeTVar var IteratorOverClosed
-                     return IteratorOverEndOfStream
+                   -> (IteratorOverClosed, IteratorOverEndOfStream)
                  | otherwise
-                   -> do
-                     writeTVar var IteratorOverPending
-                     return $ IteratorOverNextBatch $ sliceNextEventNumber slice
-          IteratorOverPending -> retrySTM
-          IteratorOverClosed -> return IteratorOverEndOfStream
+                   -> let resp = IteratorOverNextBatch $
+                                 sliceNextEventNumber slice in
+                     (st, resp)
+          IteratorOverClosed -> (st, IteratorOverEndOfStream)
 
       case action of
         IteratorOverEvent e -> return $ Just e
@@ -317,8 +307,9 @@ iterateOver store var name = go
           res <- readBatch store name (startFrom num)
           case res of
             ReadFailure _ -> do
-              atomically $ writeTVar var IteratorOverClosed
+              liftIO $ atomicModifyIORef' ref $ \_ -> (IteratorOverClosed, ())
               return Nothing
             ReadSuccess slice -> do
-              atomically $ writeTVar var $ IteratorOverAvailable slice
+              let nxtSt = IteratorOverAvailable slice
+              liftIO $ atomicModifyIORef' ref $ \_ -> (nxtSt, ())
               go
