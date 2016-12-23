@@ -11,7 +11,7 @@
 -- Portability : non-portable
 --
 -- This module exposes an implementation of Store for testing purpose.
--- IT'S NOT THREADSAFE !!!
+-- This implementation is threadsafe.
 --------------------------------------------------------------------------------
 module EventSource.Store.Stub
   ( Stream(..)
@@ -44,19 +44,19 @@ type Subs = Map SubscriptionId Sub
 
 --------------------------------------------------------------------------------
 data StubStore =
-  StubStore { _streams :: IORef (Map StreamName Stream)
-            , _subs :: IORef (Map StreamName Subs)
+  StubStore { _streams :: TVar (Map StreamName Stream)
+            , _subs :: TVar (Map StreamName Subs)
             }
 
 --------------------------------------------------------------------------------
 -- | Creates a new stub event store.
 newStub :: IO StubStore
-newStub = StubStore <$> newIORef mempty <*> newIORef mempty
+newStub = StubStore <$> newTVarIO mempty <*> newTVarIO mempty
 
 --------------------------------------------------------------------------------
 -- | Returns current 'StubStore' streams state.
 streams :: StubStore -> IO (Map StreamName Stream)
-streams StubStore{..} = readIORef _streams
+streams StubStore{..} = readTVarIO _streams
 
 --------------------------------------------------------------------------------
 -- | Returns the last event of stream.
@@ -74,7 +74,7 @@ lastStreamEvent stub name = do
 -- | Returns all subscriptions a stream has.
 subscriptionIds :: StubStore -> StreamName -> IO [SubscriptionId]
 subscriptionIds StubStore{..} name = do
-  subMap <- readIORef _subs
+  subMap <- readTVarIO _subs
   case lookup name subMap of
     Nothing -> return []
     Just subs -> return $ keys subs
@@ -95,11 +95,11 @@ newStream :: [Event] -> Stream
 newStream xs = appendStream xs (Stream 0 mempty)
 
 --------------------------------------------------------------------------------
-notifySubs :: StubStore -> StreamName -> [SavedEvent] -> IO ()
+notifySubs :: StubStore -> StreamName -> [SavedEvent] -> STM ()
 notifySubs StubStore{..} name events = do
-  subMap <- readIORef _subs
+  subMap <- readTVar _subs
   for_ (lookup name subMap) $ \subs ->
-    atomically $ for_ subs $ \sub ->
+    for_ subs $ \sub ->
       for_ events $ \e ->
         writeTChan sub e
 
@@ -119,56 +119,55 @@ buildEvent a = do
 instance Store StubStore where
   appendEvents self@StubStore{..} name ver xs = do
     events <- traverse buildEvent xs
-    streamMap <- liftIO $ readIORef _streams
+    atomically $ do
+      streamMap <- readTVar _streams
 
-    case lookup name streamMap of
-      Nothing -> do
-        case ver of
-          StreamExists ->
-            liftIO $ throwIO $ ExpectedVersionException ver NoStream
-          ExactVersion v ->
-            unless (v == 0) $ liftIO
-                            $ throwIO
-                            $ ExpectedVersionException ver NoStream
-          _ -> return ()
+      case lookup name streamMap of
+        Nothing -> do
+          case ver of
+            StreamExists ->
+              throwSTM $ ExpectedVersionException ver NoStream
+            ExactVersion v ->
+              unless (v == 0) $ throwSTM
+                              $ ExpectedVersionException ver NoStream
+            _ -> return ()
 
-        let _F Nothing  = Just $ newStream events
-            _F (Just s) = Just $ appendStream events s
+          let _F Nothing  = Just $ newStream events
+              _F (Just s) = Just $ appendStream events s
 
-            newStreamMap = alterMap _F name streamMap
+              newStreamMap = alterMap _F name streamMap
 
-        liftIO $ writeIORef _streams newStreamMap
+          writeTVar _streams newStreamMap
 
-        -- This part is already performed in 'appendStream' but difficult
-        -- to take its logic apart from building 'SavedEvent's.
-        let saved = SavedEvent <$> [0..] <*> events
-        liftIO $ notifySubs self name saved
+          -- This part is already performed in 'appendStream' but difficult
+          -- to take its logic apart from building 'SavedEvent's.
+          let saved = SavedEvent <$> [0..] <*> events
+          notifySubs self name saved
 
-      Just stream -> do
-        let currentNumber = streamNextNumber stream
-        case ver of
-          NoStream ->
-            liftIO $ throwIO $ ExpectedVersionException ver StreamExists
-          ExactVersion v ->
-            unless (v == streamNextNumber stream - 1)
-              $ liftIO
-              $ throwIO
-              $ ExpectedVersionException ver (ExactVersion currentNumber)
+        Just stream -> do
+          let currentNumber = streamNextNumber stream
+          case ver of
+            NoStream ->
+              throwSTM $ ExpectedVersionException ver StreamExists
+            ExactVersion v ->
+              unless (v == streamNextNumber stream - 1)
+                $ throwSTM
+                $ ExpectedVersionException ver (ExactVersion currentNumber)
 
-          _ -> return ()
+            _ -> return ()
 
-        let nextStream = appendStream events stream
-            newStreamMap = adjustMap (const nextStream) name streamMap
+          let nextStream = appendStream events stream
+              newStreamMap = adjustMap (const nextStream) name streamMap
 
-        liftIO $ writeIORef _streams newStreamMap
+          writeTVar _streams newStreamMap
 
-        -- This part is already performed in 'appendStream' but difficult
-        -- to take its logic apart from building 'SavedEvent's.
-        let saved = SavedEvent <$> [currentNumber..] <*> events
-        liftIO $ notifySubs self name saved
+          -- This part is already performed in 'appendStream' but difficult
+          -- to take its logic apart from building 'SavedEvent's.
+          let saved = SavedEvent <$> [currentNumber..] <*> events
+          notifySubs self name saved
 
-  readBatch StubStore{..} name (Batch from _) = do
-    streamMap <- liftIO $ readIORef _streams
+  readBatch StubStore{..} name (Batch from _) = atomically $ do
+    streamMap <- readTVar _streams
     case lookup name streamMap of
       Nothing -> return $ ReadFailure StreamNotFound
       Just stream -> do
@@ -181,17 +180,18 @@ instance Store StubStore where
         return $ ReadSuccess slice
 
   subscribe StubStore{..} name = do
-    chan <- liftIO newTChanIO
     sid <- freshSubscriptionId
-    let sub = Subscription sid $ atomically $ do
+    atomically $ do
+      chan <- newTChan
+      let sub = Subscription sid $ atomically $ do
             saved <- readTChan chan
             return $ Right saved
 
-    subMap <- liftIO $ readIORef _subs
-    let _F Nothing  = Just $ singletonMap sid  chan
-        _F (Just m) = Just $ insertMap sid chan m
+      subMap <- readTVar _subs
+      let _F Nothing  = Just $ singletonMap sid  chan
+          _F (Just m) = Just $ insertMap sid chan m
 
-        nextSubMap = alterMap _F name subMap
+          nextSubMap = alterMap _F name subMap
 
-    liftIO $ writeIORef _subs nextSubMap
-    return sub
+      writeTVar _subs nextSubMap
+      return sub

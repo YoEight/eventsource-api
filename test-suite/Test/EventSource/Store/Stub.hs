@@ -36,7 +36,8 @@ instance DecodeEvent TestEvent where
     unless (eventType == "test-event") $
       Left "Wrong event type"
 
-    fmap TestEvent $ dataAsJson eventPayload
+    dataAsParse eventPayload $ withObject "" $ \o ->
+      fmap TestEvent (o .: "value")
 
 --------------------------------------------------------------------------------
 test :: IO TestTree
@@ -44,7 +45,7 @@ test = testSpec "Store Stub" spec
 
 --------------------------------------------------------------------------------
 spec :: Spec
-spec = do
+spec = parallel $ do
   stub <- runIO newStub
 
   it "should add event" $ do
@@ -60,3 +61,15 @@ spec = do
     let deserialized = decodeEvent $ savedEvent saved
 
     deserialized `shouldBe` Right expected
+
+  it "should read events batch" $ do
+    let expected = fmap TestEvent [1..3]
+    appendEvents stub "test-2" AnyVersion expected
+    res <- streamIterator stub "test-2"
+
+    res `shouldSatisfy` isReadSuccess
+
+    let ReadSuccess i = res
+    got <- iteratorReadAllEvents i
+
+    got `shouldBe` expected
