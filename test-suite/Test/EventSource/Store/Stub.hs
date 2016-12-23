@@ -51,16 +51,15 @@ spec = parallel $ do
   it "should add event" $ do
     let expected = TestEvent 1
     appendEvent stub "test-1" AnyVersion expected
-    eventOpt <- lastStreamEvent stub "test-1"
+    res <- readBatch stub "test-1" (startFrom 0)
 
-    eventOpt `shouldSatisfy` isJust
-    let Just saved = eventOpt
+    res `shouldSatisfy` isReadSuccess
+    let ReadSuccess slice = res
 
-    eventNumber saved `shouldBe` 0
+    for_ (zip [0..] $ sliceEvents slice) $ \(num, e) ->
+      eventNumber e `shouldBe` num
 
-    let deserialized = decodeEvent $ savedEvent saved
-
-    deserialized `shouldBe` Right expected
+    sliceEventsAs slice `shouldBe` Right [expected]
 
   it "should read events batch" $ do
     let expected = fmap TestEvent [1..3]

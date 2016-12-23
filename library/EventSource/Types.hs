@@ -200,11 +200,22 @@ data SavedEvent =
              } deriving Show
 
 --------------------------------------------------------------------------------
+-- | Deserializes a 'SavedEvent'.
+savedEventAs :: DecodeEvent a => SavedEvent -> Either Text a
+savedEventAs = decodeEvent . savedEvent
+
+--------------------------------------------------------------------------------
+-- | Represents batch of events read from a store.
 data Slice =
   Slice { sliceEvents :: [SavedEvent]
         , sliceEndOfStream :: Bool
         , sliceNextEventNumber :: Int32
-        }
+        } deriving Show
+
+--------------------------------------------------------------------------------
+-- | Deserializes a 'Slice''s events.
+sliceEventsAs :: DecodeEvent a => Slice -> Either Text [a]
+sliceEventsAs = traverse savedEventAs . sliceEvents
 
 --------------------------------------------------------------------------------
 -- | Encodes a data object into an 'Event'. 'encodeEvent' get passed an
