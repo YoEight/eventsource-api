@@ -40,6 +40,9 @@ name: eventsource-api
 synopsis: Provides a eventsourcing high level API.
 tests:
   eventsource-api-test-suite:
+    default-extensions:
+    - NoImplicitPrelude
+
     dependencies:
     - base
     - eventsource-api

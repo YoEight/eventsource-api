@@ -9,6 +9,7 @@
 -- Portability : non-portable
 --
 --------------------------------------------------------------------------------
+import ClassyPrelude
 import qualified Test.Tasty
 import Test.Tasty.Hspec
 

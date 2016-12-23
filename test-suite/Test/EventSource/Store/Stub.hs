@@ -73,3 +73,15 @@ spec = parallel $ do
     got <- iteratorReadAllEvents i
 
     got `shouldBe` expected
+
+  it "should allow subscription" $ do
+    let expected = TestEvent 1
+    sub <- subscribe stub "test-3"
+
+    appendEvent stub "test-3" AnyVersion expected
+
+    res <- nextEventAs sub
+    res `shouldSatisfy` either (const False) (const True)
+
+    let Right got = res
+    got `shouldBe` expected
