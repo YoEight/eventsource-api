@@ -15,13 +15,11 @@ module Test.EventSource.Store.Stub (test) where
 
 --------------------------------------------------------------------------------
 import ClassyPrelude
-import EventSource
 import EventSource.Store.Stub
 import Test.Tasty (TestTree)
 import Test.Tasty.Hspec
 
 --------------------------------------------------------------------------------
-import           Test.EventSource.Event
 import qualified Test.EventSource.Store.Api as Api
 
 --------------------------------------------------------------------------------
