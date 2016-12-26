@@ -22,7 +22,8 @@ library:
   - mtl
   source-dirs: library
 license: BSD3
-maintainer: Yorick Laupa <yo.eight@gmail.com>
+author: Yorick Laupa
+maintainer: yo.eight@gmail.com
 name: eventsource-stub-store
 synopsis: An in-memory stub store implementation.
 tests:

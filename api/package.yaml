@@ -23,7 +23,8 @@ library:
     - containers
   source-dirs: library
 license: BSD3
-maintainer: Yorick Laupa
+author: Yorick Laupa
+maintainer: yo.eight@gmail.com
 name: eventsource-api
 synopsis: Provides a eventsourcing high level API.
 version: '1.0.0'
