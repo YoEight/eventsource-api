@@ -12,7 +12,7 @@
 -- Portability : non-portable
 --
 --------------------------------------------------------------------------------
-module Test.EventSource.Store.Specification (spec) where
+module Test.EventSource.Store.Specification (specification) where
 
 --------------------------------------------------------------------------------
 import ClassyPrelude
@@ -45,8 +45,8 @@ incr :: Int -> Int
 incr = (+1)
 
 --------------------------------------------------------------------------------
-spec :: Store store => store -> Spec
-spec store = do
+specification :: Store store => store -> Spec
+specification store = do
   specify "API - Add event" $ do
     let expected = TestEvent 1
     appendEvent store "add-event" AnyVersion expected
