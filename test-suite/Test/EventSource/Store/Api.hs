@@ -30,6 +30,43 @@ incr = (+1)
 --------------------------------------------------------------------------------
 spec :: Store store => store -> Spec
 spec store = do
+  specify "API - Add event" $ do
+    let expected = TestEvent 1
+    appendEvent store "add-event" AnyVersion expected
+    res <- readBatch store "add-event" (startFrom 0)
+
+    res `shouldSatisfy` isReadSuccess
+    let ReadSuccess slice = res
+
+    for_ (zip [0..] $ sliceEvents slice) $ \(num, e) ->
+      eventNumber e `shouldBe` num
+
+    sliceEventsAs slice `shouldBe` Right [expected]
+
+  specify "API - Read events in batch" $ do
+    let expected = fmap TestEvent [1..3]
+    appendEvents store "read-events-batch" AnyVersion expected
+    res <- streamIterator store "read-events-batch"
+
+    res `shouldSatisfy` isReadSuccess
+
+    let ReadSuccess i = res
+    got <- iteratorReadAllEvents i
+
+    got `shouldBe` expected
+
+  specify "API - Subscription working" $ do
+    let expected = TestEvent 1
+    sub <- subscribe store "subscription-working"
+
+    appendEvent store "subscription-working" AnyVersion expected
+
+    res <- nextEventAs sub
+    res `shouldSatisfy` either (const False) (const True)
+
+    let Right got = res
+    got `shouldBe` expected
+
   specify "API - forEvents" $ do
     let events = fmap TestEvent [0..9]
 

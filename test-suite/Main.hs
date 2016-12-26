@@ -11,7 +11,6 @@
 --------------------------------------------------------------------------------
 import ClassyPrelude
 import qualified Test.Tasty
-import Test.Tasty.Hspec
 
 --------------------------------------------------------------------------------
 import qualified Test.EventSource.Store.Stub as Stub
