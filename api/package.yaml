@@ -26,23 +26,4 @@ license: BSD3
 maintainer: Yorick Laupa
 name: eventsource-api
 synopsis: Provides a eventsourcing high level API.
-tests:
-  eventsource-api-test-suite:
-    default-extensions:
-    - NoImplicitPrelude
-
-    dependencies:
-    - base
-    - eventsource-api
-    - tasty
-    - tasty-hspec
-    - classy-prelude
-    - aeson
-    - mtl
-    ghc-options:
-    - -rtsopts
-    - -threaded
-    - -with-rtsopts=-N
-    main: Main.hs
-    source-dirs: test-suite
 version: '1.0.0'
