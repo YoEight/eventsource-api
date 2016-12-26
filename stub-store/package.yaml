@@ -1,0 +1,43 @@
+# This YAML file describes your package. Stack will automatically generate a
+# Cabal file when you run `stack build`. See the hpack website for help with
+# this file: <https://github.com/sol/hpack>.
+category: Eventsourcing
+description: An in-memory stub store implementation.
+extra-source-files:
+- CHANGELOG.md
+- LICENSE.md
+- package.yaml
+- README.md
+- stack.yaml
+ghc-options: -Wall
+github: YoEight/eventsource-api
+library:
+  default-extensions:
+    - NoImplicitPrelude
+  dependencies:
+  - base
+  - eventsource-api
+  - classy-prelude ==1.0.*
+  - containers
+  - mtl
+  source-dirs: library
+license: BSD3
+maintainer: Yorick Laupa <yo.eight@gmail.com>
+name: eventsource-stub-store
+synopsis: An in-memory stub store implementation.
+tests:
+  eventsource-stub-store-test-suite:
+    dependencies:
+    - base
+    - eventsource-store-specs
+    - eventsource-stub-store
+    - tasty
+    - tasty-hspec
+    - classy-prelude ==1.0.*
+    ghc-options:
+    - -rtsopts
+    - -threaded
+    - -with-rtsopts=-N
+    main: Main.hs
+    source-dirs: test-suite
+version: '1.0.0'
