@@ -21,6 +21,7 @@ library:
   - tasty-hspec
   - mtl
   - aeson
+  - uuid
   source-dirs: library
 license: BSD3
 author: Yorick Laupa

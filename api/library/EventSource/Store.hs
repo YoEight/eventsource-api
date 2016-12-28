@@ -119,14 +119,14 @@ class Store store where
                -> StreamName
                -> ExpectedVersion
                -> [a]
-               -> m ()
+               -> m (Async EventNumber)
 
   -- | Appends a batch of events at the end of a stream.
   readBatch :: MonadIO m
             => store
             -> StreamName
             -> Batch
-            -> m (ReadStatus Slice)
+            -> m (Async (ReadStatus Slice))
 
   -- | Subscribes to given stream.
   subscribe :: MonadIO m => store -> StreamName -> m Subscription
@@ -148,7 +148,7 @@ appendEvent :: (EncodeEvent a, MonadIO m, Store store)
             -> StreamName
             -> ExpectedVersion
             -> a
-            -> m ()
+            -> m (Async EventNumber)
 appendEvent store stream ver a = appendEvents store stream ver [a]
 
 --------------------------------------------------------------------------------
@@ -260,7 +260,8 @@ streamIterator :: (Store store, MonadIO m)
                -> StreamName
                -> m (ReadStatus StreamIterator)
 streamIterator store name = do
-  res <- readBatch store name (startFrom 0)
+  w <- readBatch store name (startFrom 0)
+  res <- waitAsync w
   for res $ \slice -> do
     ref <- liftIO $ newIORef $ IteratorOverAvailable slice
     return $ StreamIterator $ iterateOver store ref name
@@ -305,7 +306,8 @@ iterateOver store ref name = go
         IteratorOverEvent e -> return $ Just e
         IteratorOverEndOfStream -> return Nothing
         IteratorOverNextBatch num -> do
-          res <- readBatch store name (startFrom num)
+          w <- readBatch store name (startFrom num)
+          res <- waitAsync w
           case res of
             ReadFailure _ -> do
               liftIO $ atomicModifyIORef' ref $ \_ -> (IteratorOverClosed, ())

@@ -118,15 +118,12 @@ instance Store GetEventStore where
   appendEvents (GetEventStore conn) (StreamName name) ver xs = liftIO $ do
     events <- traverse makeEvent xs
     w <- GES.sendEvents conn name (toGesExpVer ver) events
-    _ <- waitAsync w
-    return ()
+    return $ fmap (EventNumber . GES.writeNextExpectedVersion) w
 
   readBatch (GetEventStore conn) (StreamName name) b = liftIO $ do
     let EventNumber n = batchFrom b
     w <- GES.readStreamEventsForward conn name n (batchSize b) True
-    resp <- waitAsync w
-    let res = fromGesSlice <$> resp
-    return $ fromGesReadResult res
+    return $ fmap (fmap fromGesSlice . fromGesReadResult) w
 
   subscribe (GetEventStore conn) (StreamName name) = liftIO $ do
     sub <- GES.subscribe conn name True

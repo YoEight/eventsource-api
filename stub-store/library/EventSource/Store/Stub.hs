@@ -25,6 +25,7 @@ module EventSource.Store.Stub
 --------------------------------------------------------------------------------
 import ClassyPrelude
 import Control.Monad.State.Strict
+import Data.Semigroup
 import Data.Sequence hiding (filter, zip)
 
 --------------------------------------------------------------------------------
@@ -119,7 +120,7 @@ buildEvent a = do
 instance Store StubStore where
   appendEvents self@StubStore{..} name ver xs = do
     events <- traverse buildEvent xs
-    atomically $ do
+    liftIO $ async $ atomically $ do
       streamMap <- readTVar _streams
 
       case lookup name streamMap of
@@ -143,6 +144,10 @@ instance Store StubStore where
           -- to take its logic apart from building 'SavedEvent's.
           let saved = uncurry SavedEvent <$> zip [0..] events
           notifySubs self name saved
+          let last = getLast $ ofoldMap1Ex Last saved
+              nextNum = eventNumber last + 1
+          return nextNum
+
 
         Just stream -> do
           let currentNumber = streamNextNumber stream
@@ -165,8 +170,12 @@ instance Store StubStore where
           -- to take its logic apart from building 'SavedEvent's.
           let saved = uncurry SavedEvent <$> zip [currentNumber..] events
           notifySubs self name saved
+          let last = getLast $ ofoldMap1Ex Last saved
+              nextNum = eventNumber last + 1
+          return nextNum
 
-  readBatch StubStore{..} name (Batch from _) = atomically $ do
+
+  readBatch StubStore{..} name (Batch from _) = liftIO $ async $ atomically $ do
     streamMap <- readTVar _streams
     case lookup name streamMap of
       Nothing -> return $ ReadFailure StreamNotFound

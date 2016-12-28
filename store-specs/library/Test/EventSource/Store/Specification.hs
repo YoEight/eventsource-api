@@ -19,6 +19,8 @@ import ClassyPrelude
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Aeson.Types
+import Data.UUID
+import Data.UUID.V4
 import EventSource
 import Test.Tasty.Hspec
 
@@ -41,6 +43,10 @@ instance DecodeEvent TestEvent where
       fmap TestEvent (o .: "value")
 
 --------------------------------------------------------------------------------
+freshStreamName :: MonadIO m => m StreamName
+freshStreamName = liftIO $ fmap (StreamName . toText) nextRandom
+
+--------------------------------------------------------------------------------
 incr :: Int -> Int
 incr = (+1)
 
@@ -49,8 +55,9 @@ specification :: Store store => store -> Spec
 specification store = do
   specify "API - Add event" $ do
     let expected = TestEvent 1
-    appendEvent store "add-event" AnyVersion expected
-    res <- readBatch store "add-event" (startFrom 0)
+    name <- freshStreamName
+    _ <- waitAsync =<< appendEvent store name AnyVersion expected
+    res <- waitAsync =<< readBatch store name (startFrom 0)
 
     res `shouldSatisfy` isReadSuccess
     let ReadSuccess slice = res
@@ -62,8 +69,10 @@ specification store = do
 
   specify "API - Read events in batch" $ do
     let expected = fmap TestEvent [1..3]
-    appendEvents store "read-events-batch" AnyVersion expected
-    res <- streamIterator store "read-events-batch"
+    name <- freshStreamName
+    _ <- waitAsync =<< appendEvents store name AnyVersion
+                         expected
+    res <- streamIterator store name
 
     res `shouldSatisfy` isReadSuccess
 
@@ -74,9 +83,10 @@ specification store = do
 
   specify "API - Subscription working" $ do
     let expected = TestEvent 1
-    sub <- subscribe store "subscription-working"
+    name <- freshStreamName
+    sub <- subscribe store name
 
-    appendEvent store "subscription-working" AnyVersion expected
+    _ <- waitAsync =<< appendEvent store name AnyVersion expected
 
     res <- nextEventAs sub
     res `shouldSatisfy` either (const False) (const True)
@@ -86,11 +96,11 @@ specification store = do
 
   specify "API - forEvents" $ do
     let events = fmap TestEvent [0..9]
-
-    appendEvents store "for-events" AnyVersion events
+    name <- freshStreamName
+    _ <- waitAsync =<< appendEvents store name AnyVersion events
 
     let action = do
-          forEvents store "for-events" $ \(_ :: TestEvent) ->
+          forEvents store name $ \(_ :: TestEvent) ->
             modify incr
           get
 
@@ -103,10 +113,10 @@ specification store = do
 
   specify "API - foldEvents" $ do
     let events = fmap TestEvent [0..9]
+    name <- freshStreamName
+    _ <- waitAsync =<< appendEvents store name AnyVersion events
 
-    appendEvents store "fold-events" AnyVersion events
-
-    res <- runExceptT $ foldEvents store "fold-events"
+    res <- runExceptT $ foldEvents store name
                       (\s (_ :: TestEvent) -> s + 1)
                       0
 
@@ -117,10 +127,10 @@ specification store = do
 
   specify "API - Iterator.readAllEvents" $ do
     let events = fmap TestEvent [0..9]
+    name <- freshStreamName
+    _ <- waitAsync =<< appendEvents store name AnyVersion events
 
-    appendEvents store "readAllEvents" AnyVersion events
-
-    res <- streamIterator store "readAllEvents"
+    res <- streamIterator store name
     res `shouldSatisfy` isReadSuccess
     let ReadSuccess i = res
 
