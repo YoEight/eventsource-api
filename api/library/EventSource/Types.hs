@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 --------------------------------------------------------------------------------
 -- |
 -- Module : EventSource.Types
@@ -210,9 +211,13 @@ data Event =
         } deriving Show
 
 --------------------------------------------------------------------------------
+-- | Represents an event index in a stream.
+newtype EventNumber = EventNumber Int32 deriving (Eq, Ord, Num, Enum, Show)
+
+--------------------------------------------------------------------------------
 -- | Represents an event that's saved into the event store.
 data SavedEvent =
-  SavedEvent { eventNumber :: Int32
+  SavedEvent { eventNumber :: EventNumber
              , savedEvent :: Event
              } deriving Show
 
@@ -226,7 +231,7 @@ savedEventAs = decodeEvent . savedEvent
 data Slice =
   Slice { sliceEvents :: [SavedEvent]
         , sliceEndOfStream :: Bool
-        , sliceNextEventNumber :: Int32
+        , sliceNextEventNumber :: EventNumber
         } deriving Show
 
 --------------------------------------------------------------------------------
@@ -265,7 +270,7 @@ data ExpectedVersion
     -- Stream shouldn't exist.
   | StreamExists
     -- Stream should exist.
-  | ExactVersion Int32
+  | ExactVersion EventNumber
     -- Stream should be at givent event number.
   deriving Show
 

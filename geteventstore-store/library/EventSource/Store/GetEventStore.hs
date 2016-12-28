@@ -30,7 +30,9 @@ toGesExpVer :: ExpectedVersion -> GES.ExpectedVersion
 toGesExpVer AnyVersion = GES.anyVersion
 toGesExpVer NoStream = GES.noStreamVersion
 toGesExpVer StreamExists = GES.streamExists
-toGesExpVer (ExactVersion n) = GES.exactEventVersion n
+toGesExpVer (ExactVersion n) =
+  let EventNumber i = n in
+  GES.exactEventVersion i
 
 --------------------------------------------------------------------------------
 buildEvent :: (EncodeEvent a, MonadIO m) => a -> m Event
@@ -81,7 +83,7 @@ fromGesEvent e = saved
                   , eventPayload = dataFromBytes payload
                   , eventMetadata = decodeStrict =<< metaBytes
                   }
-    saved = SavedEvent { eventNumber = num
+    saved = SavedEvent { eventNumber = EventNumber num
                        , savedEvent = event
                        }
 
@@ -89,7 +91,7 @@ fromGesEvent e = saved
 fromGesSlice :: GES.StreamSlice -> Slice
 fromGesSlice s = Slice { sliceEvents = fromGesEvent <$> GES.sliceEvents s
                        , sliceEndOfStream = GES.sliceEOS s
-                       , sliceNextEventNumber = GES.sliceNext s
+                       , sliceNextEventNumber = EventNumber $ GES.sliceNext s
                        }
 
 --------------------------------------------------------------------------------
@@ -120,7 +122,8 @@ instance Store GetEventStore where
     return ()
 
   readBatch (GetEventStore conn) (StreamName name) b = liftIO $ do
-    w <- GES.readStreamEventsForward conn name (batchFrom b) (batchSize b) True
+    let EventNumber n = batchFrom b
+    w <- GES.readStreamEventsForward conn name n (batchSize b) True
     resp <- waitAsync w
     let res = fromGesSlice <$> resp
     return $ fromGesReadResult res

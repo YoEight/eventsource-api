@@ -34,7 +34,7 @@ import EventSource.Types hiding (singleton)
 --------------------------------------------------------------------------------
 -- | Holds stream state data.
 data Stream =
-  Stream { streamNextNumber :: Int32
+  Stream { streamNextNumber :: EventNumber
          , streamEvents :: Seq SavedEvent
          }
 

@@ -27,14 +27,14 @@ import EventSource.Types
 --------------------------------------------------------------------------------
 -- | Represents batch information needed to read a stream.
 data Batch =
-  Batch { batchFrom :: Int32
+  Batch { batchFrom :: EventNumber
         , batchSize :: Int32
         }
 
 --------------------------------------------------------------------------------
 -- | Starts a 'Batch' from a given point. The batch size is set to default,
 --   which is 500.
-startFrom :: Int32 -> Batch
+startFrom :: EventNumber -> Batch
 startFrom from = Batch from 500
 
 --------------------------------------------------------------------------------
@@ -273,7 +273,7 @@ data IteratorOverState
 --------------------------------------------------------------------------------
 data IteratorOverAction
   = IteratorOverEvent SavedEvent
-  | IteratorOverNextBatch Int32
+  | IteratorOverNextBatch EventNumber
   | IteratorOverEndOfStream
 
 --------------------------------------------------------------------------------
