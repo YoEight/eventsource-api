@@ -16,7 +16,7 @@ module EventSource.Types where
 import Data.Foldable
 
 --------------------------------------------------------------------------------
-import ClassyPrelude
+import ClassyPrelude hiding (foldlM)
 import Control.Monad.State.Strict
 import Data.Aeson
 import Data.Aeson.Types
@@ -24,7 +24,10 @@ import Data.UUID hiding (fromString)
 import Data.UUID.V4
 
 --------------------------------------------------------------------------------
-newtype Data = Data ByteString
+-- | Opaque data type used to store raw data.
+data Data
+  = Data ByteString
+  | DataAsJson Value
 
 --------------------------------------------------------------------------------
 instance Show Data where
@@ -61,6 +64,7 @@ instance Monad JsonParsing where
 -- | Returns 'Data' content as a 'ByteString'.
 dataAsBytes :: Data -> ByteString
 dataAsBytes (Data bs) = bs
+dataAsBytes (DataAsJson v) = toStrict $ encode v
 
 --------------------------------------------------------------------------------
 -- | Creates a 'Data' object from a raw 'ByteString'.
@@ -70,12 +74,13 @@ dataFromBytes = Data
 --------------------------------------------------------------------------------
 -- | Creates a 'Data' object from a JSON object.
 dataFromJson :: ToJSON a => a -> Data
-dataFromJson = dataFromBytes . toStrict . encode
+dataFromJson = DataAsJson . toJSON
 
 --------------------------------------------------------------------------------
 -- | Returns 'Data' content as any value that implements 'FromJSON' type-class.
 dataAsJson :: FromJSON a => Data -> Either Text a
-dataAsJson = first pack . eitherDecodeStrict . dataAsBytes
+dataAsJson (Data bs) = first pack $ eitherDecodeStrict bs
+dataAsJson (DataAsJson v) = first pack $ parseEither parseJSON v
 
 --------------------------------------------------------------------------------
 -- | Uses a 'JsonParsing' comuputation to extract a value.
@@ -102,6 +107,18 @@ instance Monoid Properties where
 --------------------------------------------------------------------------------
 instance Show Properties where
   show (Properties m) = show m
+
+--------------------------------------------------------------------------------
+instance ToJSON Properties where
+  toJSON = object . fmap go . properties
+    where
+      go (k, v) = k .= v
+
+--------------------------------------------------------------------------------
+instance FromJSON Properties where
+  parseJSON = withObject "Properties" $ \o ->
+    let go p k = fmap (\v -> setProperty k v p) (o .: k) in
+    foldlM go mempty (keys o)
 
 --------------------------------------------------------------------------------
 -- | Retrieves a value associated with the given key.
@@ -276,7 +293,7 @@ isReadFailure _ = False
 data ReadFailure
   = StreamNotFound
   | ReadError (Maybe Text)
-  | AccessDenied Text
+  | AccessDenied
   deriving Show
 
 --------------------------------------------------------------------------------
