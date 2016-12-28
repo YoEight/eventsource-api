@@ -12,7 +12,11 @@
 --
 -- This module exposes a GetEventStore implementation of Store interface.
 --------------------------------------------------------------------------------
-module EventSource.Store.GetEventStore where
+module EventSource.Store.GetEventStore
+  ( GetEventStore
+  , gesConnection
+  , gesStore
+  ) where
 
 --------------------------------------------------------------------------------
 import           ClassyPrelude

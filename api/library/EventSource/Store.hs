@@ -12,7 +12,29 @@
 -- Portability : non-portable
 --
 --------------------------------------------------------------------------------
-module EventSource.Store where
+module EventSource.Store
+  ( Batch(..)
+  , Subscription(..)
+  , SubscriptionId
+  , ExpectedVersionException(..)
+  , Store(..)
+  , SomeStore(..)
+  , StreamIterator
+  , iteratorNext
+  , iteratorNextEvent
+  , iteratorReadAll
+  , iteratorReadAllEvents
+  , streamIterator
+  , freshSubscriptionId
+  , startFrom
+  , nextEventAs
+  , foldSub
+  , foldSubAsync
+  , appendEvent
+  , forEvents
+  , foldEventsM
+  , foldEvents
+  ) where
 
 --------------------------------------------------------------------------------
 import ClassyPrelude
