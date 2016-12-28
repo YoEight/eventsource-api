@@ -39,9 +39,12 @@ packages:
 - 'api'
 - 'store-specs'
 - 'stub-store'
+- 'geteventstore-store'
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps: []
+extra-deps: [ eventstore-0.14.0.0
+            , http-client-0.5.4
+            ]
 
 # Override default flag values for local packages and extra-deps
 flags: {}

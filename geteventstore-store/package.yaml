@@ -17,11 +17,13 @@ library:
   - classy-prelude ==1.0.*
   - eventstore ==0.14.*
   - eventsource-api ==1.*
+  - aeson
+  - mtl
   source-dirs: library
 license: BSD3
 author: Yorick Laupa
 maintainer: yo.eight@gmail.comm
-name: eventstore-geteventstore-store
+name: eventsource-geteventstore-store
 synopsis: GetEventStore store implementation.
 tests:
   geteventstore-store-test-suite:
@@ -30,8 +32,10 @@ tests:
     - eventsource-geteventstore-store
     - eventsource-api
     - eventsource-store-specs
+    - eventstore
     - tasty
     - tasty-hspec
+    - classy-prelude
     ghc-options:
     - -rtsopts
     - -threaded
