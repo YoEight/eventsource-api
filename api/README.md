@@ -1,48 +1,60 @@
 # [eventsource-api][]
 
-Thanks for starting a project with Haskeleton! If you haven't heard of it
-before, I suggest reading the introductory blog post. You can find it here:
-<http://taylor.fausak.me/2014/03/04/haskeleton-a-haskell-project-skeleton/>.
+This project provides what we think be a lean eventsourcing API. The goal is to
+set a common ground for eventsourcing-based application, yet doesn't force you
+to be trapped under a restrictive framework.
 
-Before you get started, there are a few things that this template couldn't
-provide for you. You should:
+This library main abstraction is the `Store` typeclass.
 
--   Add a synopsis to `package.yaml`. It should be a short (one sentence)
-    explanation of your project.
+```haskell
+-- | Main event store abstraction. It exposes essential features expected from
+--   an event store.
+class Store store where
+  -- | Appends a batch of events at the end of a stream.
+  appendEvents :: (EncodeEvent a, MonadIO m)
+               => store
+               -> StreamName
+               -> ExpectedVersion
+               -> [a]
+               -> m (Async EventNumber)
 
--   Add a description to `package.yaml`. This can be whatever you want it to
-    be.
+  -- | Appends a batch of events at the end of a stream.
+  readBatch :: MonadIO m
+            => store
+            -> StreamName
+            -> Batch
+            -> m (Async (ReadStatus Slice))
 
--   Add a category to `package.yaml`. A list of categories is available on
-    Hackage at <http://hackage.haskell.org/packages>.
-
--   Rename `library/Example.hs` to whatever you want your top-level module to
-    be called. Typically this is the same as your package name but in
-    `CamelCase` instead of `kebab-case`.
-
-    -   Don't forget to rename the reference to it in
-        `executable/Main.hs`!
-
--   If you are on an older version of Stack (<1.0.4), delete `package.yaml` and
-    remove `/*.cabal` from your `.gitignore`.
-
-Once you've done that, start working on your project with the Stack commands
-you know and love.
-
-``` sh
-# Build the project.
-stack build
-
-# Run the test suite.
-stack test
-
-# Run the benchmarks.
-stack bench
-
-# Generate documentation.
-stack haddock
+  -- | Subscribes to given stream.
+  subscribe :: MonadIO m => store -> StreamName -> m Subscription
 ```
 
-Thanks again, and happy hacking!
+The idea is to use any backend of your liking as long as it's able to derive that typeclass with its related implicit constraints.
 
-[eventsource-api]: https://github.com/githubuser/eventsource-api
+  1. `appendEvents` MUST add events at the end of a stream without doing any other alteration on the stream. The order of the event's array MUST be respected within the store. Most important, the implementation MUST comply to the given `ExpectedVersion` passed by the user.
+  
+  2. `readBatch` SHOULD retrieve a set of event given a starting position and a batch size (represented by the `Batch` parameter). The returned array MUST have its events ordered by their `EventNumber` property.
+
+  3. `subscribe` SHOULD register a subscription to the given stream. An implementation MUST allow to subscribe to a stream that doesn't exist yet. A subscription allows the user to be notified of any event added to the stream. There is no mandatory timing to meet regarding how fast the subscription is notified by a change. We only suggest to dispatch new events as soon as possible.
+
+#### `ExpectedVersion`
+
+A word on `ExpectedVersion`. It's a mean to preserve data consistency in a concurrent setting.
+
+```haskell
+-- | The purpose of 'ExpectedVersion' is to make sure a certain stream state is
+--   at an expected point in order to carry out a write.
+data ExpectedVersion
+  = AnyVersion
+    -- Stream is a any given state.
+  | NoStream
+    -- Stream shouldn't exist.
+  | StreamExists
+    -- Stream should exist.
+  | ExactVersion EventNumber
+    -- Stream should be at givent event number.
+```
+
+On a write, if the `ExpectedVersion` condition given by the user is not met within the store, the implementation should raise an exception. At the moment, the API doesn't capture this situation in the type system.
+
+[eventsource-api]: https://github.com/YoEight/eventsource-api
