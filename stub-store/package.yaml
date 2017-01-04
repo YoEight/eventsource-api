@@ -16,7 +16,7 @@ library:
     - NoImplicitPrelude
   dependencies:
   - base
-  - eventsource-api
+  - eventsource-api ==1.*
   - protolude >=0.1.10 && <0.2
   - containers
   - mtl
@@ -31,7 +31,7 @@ tests:
   eventsource-stub-store-test-suite:
     dependencies:
     - base
-    - eventsource-store-specs
+    - eventsource-store-specs ==1.*
     - eventsource-stub-store
     - tasty
     - tasty-hspec

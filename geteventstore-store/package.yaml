@@ -33,7 +33,7 @@ tests:
     - base
     - eventsource-geteventstore-store
     - eventsource-api
-    - eventsource-store-specs
+    - eventsource-store-specs ==1.*
     - eventstore
     - tasty
     - tasty-hspec
@@ -44,4 +44,4 @@ tests:
     - -with-rtsopts=-N
     main: Main.hs
     source-dirs: test-suite
-version: '0.0.0'
+version: '1.0.0'

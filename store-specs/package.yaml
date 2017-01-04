@@ -16,7 +16,7 @@ library:
   dependencies:
   - base
   - protolude >= 0.1.10 && <0.2
-  - eventsource-api
+  - eventsource-api ==1.*
   - tasty
   - tasty-hspec
   - mtl
@@ -28,4 +28,4 @@ author: Yorick Laupa
 maintainer: yo.eight@gmail.com
 name: eventsource-store-specs
 synopsis: Provides common test specification for Store implementation.
-version: '0.0.0'
+version: '1.0.0'
