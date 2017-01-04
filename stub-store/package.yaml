@@ -17,9 +17,10 @@ library:
   dependencies:
   - base
   - eventsource-api
-  - classy-prelude ==1.0.*
+  - protolude >=0.1.10 && <0.2
   - containers
   - mtl
+  - stm
   source-dirs: library
 license: BSD3
 author: Yorick Laupa
@@ -34,7 +35,7 @@ tests:
     - eventsource-stub-store
     - tasty
     - tasty-hspec
-    - classy-prelude ==1.0.*
+    - protolude
     ghc-options:
     - -rtsopts
     - -threaded

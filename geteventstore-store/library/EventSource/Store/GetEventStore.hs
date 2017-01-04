@@ -19,12 +19,11 @@ module EventSource.Store.GetEventStore
   ) where
 
 --------------------------------------------------------------------------------
-import           ClassyPrelude
+import           Protolude
 import           Data.Aeson
 import           Data.Aeson.Types
 import qualified Database.EventStore as GES
 import           EventSource
-import           Control.Monad.State.Strict
 
 --------------------------------------------------------------------------------
 newtype GetEventStore = GetEventStore { gesConnection :: GES.Connection }
@@ -69,7 +68,7 @@ toGesEvent e = GES.createEvent (GES.UserDefined typ) (Just eid) eventData
             DataAsJson v -> GES.withJson v
         Just p ->
           case eventPayload e of
-            Data bs -> GES.withBinaryAndMetadata bs (toStrict $ encode p)
+            Data bs -> GES.withBinaryAndMetadata bs (toS $ encode p)
             DataAsJson v -> GES.withJsonAndMetadata v p
 
 --------------------------------------------------------------------------------

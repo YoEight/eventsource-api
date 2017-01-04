@@ -14,7 +14,6 @@
 module Test.EventSource.Store.GetEventStore (test) where
 
 --------------------------------------------------------------------------------
-import ClassyPrelude
 import Database.EventStore
 import EventSource.Store.GetEventStore
 import Test.Tasty (TestTree)

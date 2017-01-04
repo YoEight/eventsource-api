@@ -16,7 +16,7 @@ library:
     - NoImplicitPrelude
   dependencies:
   - base
-  - classy-prelude ==1.0.*
+  - protolude >=0.1.10 && <0.2
   - eventstore ==0.14.*
   - eventsource-api ==1.*
   - aeson
@@ -37,7 +37,7 @@ tests:
     - eventstore
     - tasty
     - tasty-hspec
-    - classy-prelude
+    - protolude
     ghc-options:
     - -rtsopts
     - -threaded

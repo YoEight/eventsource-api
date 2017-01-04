@@ -14,7 +14,6 @@
 module Test.EventSource.Store.Stub (test) where
 
 --------------------------------------------------------------------------------
-import ClassyPrelude
 import EventSource.Store.Stub
 import Test.Tasty (TestTree)
 import Test.Tasty.Hspec

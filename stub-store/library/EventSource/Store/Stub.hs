@@ -23,10 +23,11 @@ module EventSource.Store.Stub
   ) where
 
 --------------------------------------------------------------------------------
-import ClassyPrelude
-import Control.Monad.State.Strict
-import Data.Semigroup
-import Data.Sequence hiding (filter, zip)
+import Control.Concurrent.STM
+import qualified Data.Map.Strict as M
+import Data.Sequence (Seq, (|>))
+import qualified Data.Sequence as S
+import Protolude
 
 --------------------------------------------------------------------------------
 import EventSource.Store
@@ -64,21 +65,21 @@ streams StubStore{..} = readTVarIO _streams
 lastStreamEvent :: StubStore -> StreamName -> IO (Maybe SavedEvent)
 lastStreamEvent stub name = do
   streamMap <- streams stub
-  return (go =<< lookup name streamMap)
+  return (go =<< M.lookup name streamMap)
     where
       go stream =
-        case viewr $ streamEvents stream of
-          EmptyR -> Nothing
-          _ :> e -> Just e
+        case S.viewr $ streamEvents stream of
+          S.EmptyR -> Nothing
+          _ S.:> e -> Just e
 
 --------------------------------------------------------------------------------
 -- | Returns all subscriptions a stream has.
 subscriptionIds :: StubStore -> StreamName -> IO [SubscriptionId]
 subscriptionIds StubStore{..} name = do
   subMap <- readTVarIO _subs
-  case lookup name subMap of
+  case M.lookup name subMap of
     Nothing -> return []
-    Just subs -> return $ keys subs
+    Just subs -> return $ M.keys subs
 
 --------------------------------------------------------------------------------
 appendStream :: [Event] -> Stream -> Stream
@@ -88,7 +89,7 @@ appendStream = flip $ foldl' go
       let num = streamNextNumber s
           evts = streamEvents s in
       s { streamNextNumber = num + 1
-        , streamEvents = snoc evts (SavedEvent num e)
+        , streamEvents = evts |> SavedEvent num e
         }
 
 --------------------------------------------------------------------------------
@@ -99,7 +100,7 @@ newStream xs = appendStream xs (Stream 0 mempty)
 notifySubs :: StubStore -> StreamName -> [SavedEvent] -> STM ()
 notifySubs StubStore{..} name events = do
   subMap <- readTVar _subs
-  for_ (lookup name subMap) $ \subs ->
+  for_ (M.lookup name subMap) $ \subs ->
     for_ subs $ \sub ->
       for_ events $ \e ->
         writeTChan sub e
@@ -123,7 +124,7 @@ instance Store StubStore where
     liftIO $ async $ atomically $ do
       streamMap <- readTVar _streams
 
-      case lookup name streamMap of
+      case M.lookup name streamMap of
         Nothing -> do
           case ver of
             StreamExists ->
@@ -136,7 +137,7 @@ instance Store StubStore where
           let _F Nothing  = Just $ newStream events
               _F (Just s) = Just $ appendStream events s
 
-              newStreamMap = alterMap _F name streamMap
+              newStreamMap = M.alter _F name streamMap
 
           writeTVar _streams newStreamMap
 
@@ -144,7 +145,7 @@ instance Store StubStore where
           -- to take its logic apart from building 'SavedEvent's.
           let saved = uncurry SavedEvent <$> zip [0..] events
           notifySubs self name saved
-          let last = getLast $ ofoldMap1Ex Last saved
+          let Just last = getLast $ foldMap (Last . Just) saved
               nextNum = eventNumber last + 1
           return nextNum
 
@@ -162,7 +163,7 @@ instance Store StubStore where
             _ -> return ()
 
           let nextStream = appendStream events stream
-              newStreamMap = adjustMap (const nextStream) name streamMap
+              newStreamMap = M.adjust (const nextStream) name streamMap
 
           writeTVar _streams newStreamMap
 
@@ -170,17 +171,17 @@ instance Store StubStore where
           -- to take its logic apart from building 'SavedEvent's.
           let saved = uncurry SavedEvent <$> zip [currentNumber..] events
           notifySubs self name saved
-          let last = getLast $ ofoldMap1Ex Last saved
+          let Just last = getLast $ foldMap (Last . Just) saved
               nextNum = eventNumber last + 1
           return nextNum
 
 
   readBatch StubStore{..} name (Batch from _) = liftIO $ async $ atomically $ do
     streamMap <- readTVar _streams
-    case lookup name streamMap of
+    case M.lookup name streamMap of
       Nothing -> return $ ReadFailure StreamNotFound
       Just stream -> do
-        let events = filter ((>= from) . eventNumber) $ streamEvents stream
+        let events = S.filter ((>= from) . eventNumber) $ streamEvents stream
             slice = Slice { sliceEvents = toList events
                           , sliceEndOfStream = True
                           , sliceNextEventNumber = streamNextNumber stream
@@ -190,17 +191,17 @@ instance Store StubStore where
 
   subscribe StubStore{..} name = do
     sid <- freshSubscriptionId
-    atomically $ do
+    liftIO $ atomically $ do
       chan <- newTChan
-      let sub = Subscription sid $ atomically $ do
+      let sub = Subscription sid $ liftIO $ atomically $ do
             saved <- readTChan chan
             return $ Right saved
 
       subMap <- readTVar _subs
-      let _F Nothing  = Just $ singletonMap sid  chan
-          _F (Just m) = Just $ insertMap sid chan m
+      let _F Nothing  = Just $ M.singleton sid  chan
+          _F (Just m) = Just $ M.insert sid chan m
 
-          nextSubMap = alterMap _F name subMap
+          nextSubMap = M.alter _F name subMap
 
       writeTVar _subs nextSubMap
       return sub

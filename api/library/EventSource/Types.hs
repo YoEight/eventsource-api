@@ -14,15 +14,18 @@
 module EventSource.Types where
 
 --------------------------------------------------------------------------------
+import Prelude (Show(..))
 import Data.Foldable
+import Data.String
 
 --------------------------------------------------------------------------------
-import ClassyPrelude hiding (foldlM)
-import Control.Monad.State.Strict
+import Protolude hiding (show)
 import Data.Aeson
 import Data.Aeson.Types
 import Data.UUID hiding (fromString)
 import Data.UUID.V4
+import qualified Data.HashMap.Strict as H
+import qualified Data.Map.Strict as M
 
 --------------------------------------------------------------------------------
 -- | Opaque data type used to store raw data.
@@ -65,7 +68,7 @@ instance Monad JsonParsing where
 -- | Returns 'Data' content as a 'ByteString'.
 dataAsBytes :: Data -> ByteString
 dataAsBytes (Data bs) = bs
-dataAsBytes (DataAsJson v) = toStrict $ encode v
+dataAsBytes (DataAsJson v) = toS $ encode v
 
 --------------------------------------------------------------------------------
 -- | Creates a 'Data' object from a raw 'ByteString'.
@@ -80,15 +83,15 @@ dataFromJson = DataAsJson . toJSON
 --------------------------------------------------------------------------------
 -- | Returns 'Data' content as any value that implements 'FromJSON' type-class.
 dataAsJson :: FromJSON a => Data -> Either Text a
-dataAsJson (Data bs) = first pack $ eitherDecodeStrict bs
-dataAsJson (DataAsJson v) = first pack $ parseEither parseJSON v
+dataAsJson (Data bs) = first toS $ eitherDecodeStrict bs
+dataAsJson (DataAsJson v) = first toS $ parseEither parseJSON v
 
 --------------------------------------------------------------------------------
 -- | Uses a 'JsonParsing' comuputation to extract a value.
 dataAsParsing :: Data -> JsonParsing a -> Either Text a
 dataAsParsing dat (JsonParsing k) = do
   value <- dataAsJson dat
-  first pack $ parseEither k value
+  first toS $ parseEither k value
 
 --------------------------------------------------------------------------------
 -- | Like 'dataAsParsing' but doesn't require you to use 'JsonParsing'.
@@ -119,13 +122,13 @@ instance ToJSON Properties where
 instance FromJSON Properties where
   parseJSON = withObject "Properties" $ \o ->
     let go p k = fmap (\v -> setProperty k v p) (o .: k) in
-    foldlM go mempty (keys o)
+    foldlM go mempty (H.keys o)
 
 --------------------------------------------------------------------------------
 -- | Retrieves a value associated with the given key.
 property :: MonadPlus m => Text -> Properties -> m Text
 property k (Properties m) =
-  case lookup k m of
+  case M.lookup k m of
     Nothing -> mzero
     Just v -> return v
 
@@ -137,12 +140,12 @@ singleton k v = setProperty k v mempty
 --------------------------------------------------------------------------------
 -- | Adds a pair of key-value into given 'Properties'.
 setProperty :: Text -> Text -> Properties -> Properties
-setProperty key value (Properties m) = Properties $ insertMap key value m
+setProperty key value (Properties m) = Properties $ M.insert key value m
 
 --------------------------------------------------------------------------------
 -- | Returns all associated key-value pairs as a list.
 properties :: Properties -> [(Text, Text)]
-properties (Properties m) = mapToList m
+properties (Properties m) = M.toList m
 
 --------------------------------------------------------------------------------
 -- | Used to identify an event.

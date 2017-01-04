@@ -37,11 +37,14 @@ module EventSource.Store
   ) where
 
 --------------------------------------------------------------------------------
-import ClassyPrelude
+import Prelude (Show(..))
+
+--------------------------------------------------------------------------------
 import Control.Monad.Except
-import Control.Monad.State
+import Data.IORef
 import Data.UUID
 import Data.UUID.V4
+import Protolude hiding (from, show, trans)
 
 --------------------------------------------------------------------------------
 import EventSource.Types
@@ -283,7 +286,7 @@ streamIterator :: (Store store, MonadIO m)
                -> m (ReadStatus StreamIterator)
 streamIterator store name = do
   w <- readBatch store name (startFrom 0)
-  res <- waitAsync w
+  res <- liftIO $ wait w
   for res $ \slice -> do
     ref <- liftIO $ newIORef $ IteratorOverAvailable slice
     return $ StreamIterator $ iterateOver store ref name
@@ -329,7 +332,7 @@ iterateOver store ref name = go
         IteratorOverEndOfStream -> return Nothing
         IteratorOverNextBatch num -> do
           w <- readBatch store name (startFrom num)
-          res <- waitAsync w
+          res <- liftIO $ wait w
           case res of
             ReadFailure _ -> do
               liftIO $ atomicModifyIORef' ref $ \_ -> (IteratorOverClosed, ())

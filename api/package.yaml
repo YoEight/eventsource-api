@@ -16,11 +16,12 @@ library:
     - NoImplicitPrelude
   dependencies:
     - base >=4.9 && <5
-    - classy-prelude ==1.0.*
+    - protolude >= 0.1.10 && <0.2
     - uuid
     - aeson
     - mtl
     - containers
+    - unordered-containers
   source-dirs: library
 license: BSD3
 author: Yorick Laupa
