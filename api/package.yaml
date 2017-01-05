@@ -24,6 +24,7 @@ library:
     - unordered-containers
   source-dirs: library
 license: BSD3
+license-file: LICENSE.md
 author: Yorick Laupa
 maintainer: yo.eight@gmail.com
 name: eventsource-api

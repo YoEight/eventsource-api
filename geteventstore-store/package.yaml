@@ -15,7 +15,7 @@ library:
   default-extensions:
     - NoImplicitPrelude
   dependencies:
-  - base
+  - base >=4.9 && <5
   - protolude >=0.1.10 && <0.2
   - eventstore ==0.14.*
   - eventsource-api ==1.*
@@ -23,6 +23,7 @@ library:
   - mtl
   source-dirs: library
 license: BSD3
+license-file: LICENSE.md
 author: Yorick Laupa
 maintainer: yo.eight@gmail.comm
 name: eventsource-geteventstore-store

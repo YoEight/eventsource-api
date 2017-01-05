@@ -1,6 +1,7 @@
 # This YAML file describes your package. Stack will automatically generate a
 # Cabal file when you run `stack build`. See the hpack website for help with
 # this file: <https://github.com/sol/hpack>.
+category: Eventsourcing, Testing
 description: Provides common test specification for Store implementation.
 extra-source-files:
 - CHANGELOG.md
@@ -14,7 +15,7 @@ library:
   default-extensions:
     - NoImplicitPrelude
   dependencies:
-  - base
+  - base >=4.9 && <5
   - protolude >= 0.1.10 && <0.2
   - eventsource-api ==1.*
   - tasty
@@ -24,6 +25,7 @@ library:
   - uuid
   source-dirs: library
 license: BSD3
+license-file: LICENSE.md
 author: Yorick Laupa
 maintainer: yo.eight@gmail.com
 name: eventsource-store-specs
