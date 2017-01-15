@@ -34,6 +34,12 @@ module EventSource.Store
   , forEvents
   , foldEventsM
   , foldEvents
+  , forSavedEvents
+  , foldSavedEventsM
+  , foldSavedEvents
+  , foldSubSaved
+  , foldSubSavedAsync
+  , ForEventFailure(..)
   ) where
 
 --------------------------------------------------------------------------------
@@ -123,6 +129,29 @@ foldSubAsync :: DecodeEvent a
              -> IO (Async ())
 foldSubAsync sub onEvent onError =
   async $ foldSub sub onEvent onError
+
+--------------------------------------------------------------------------------
+foldSubSaved :: (MonadIO m)
+        => Subscription
+        -> (SavedEvent -> m ())
+        -> (SomeException -> m ())
+        -> m ()
+foldSubSaved sub onEvent onError = loop
+  where
+    loop = do
+      res <- nextEvent sub
+      case res of
+        Left e -> onError e
+        Right a -> onEvent a >> loop
+
+--------------------------------------------------------------------------------
+foldSubSavedAsync ::
+                Subscription
+             -> (SavedEvent -> IO ())
+             -> (SomeException -> IO ())
+             -> IO (Async ())
+foldSubSavedAsync sub onEvent onError =
+  async $ foldSubSaved sub onEvent onError
 
 --------------------------------------------------------------------------------
 data ExpectedVersionException
@@ -232,6 +261,54 @@ foldEvents :: (MonadIO m, DecodeEvent a, Store store)
            -> ExceptT ForEventFailure m s
 foldEvents store stream k seed =
   foldEventsM store stream (\s a -> return $ k s a) seed
+
+--------------------------------------------------------------------------------
+-- | Like `forEvents` but provides access to SavedEvents instead of
+--   decoded events.
+forSavedEvents :: (MonadIO m, Store store)
+               => store
+               -> StreamName
+               -> (SavedEvent -> m ())
+               -> ExceptT ForEventFailure m ()
+forSavedEvents store name k = do
+  res <- streamIterator store name
+  case res of
+    ReadSuccess i -> loop i
+    ReadFailure e -> throwError $ ForEventReadFailure e
+  where
+    loop i = do
+      opt <- iteratorNext i
+      for_ opt $ \saved -> lift (k saved) >> loop i
+
+--------------------------------------------------------------------------------
+-- | Like 'forSavedEvents' but expose signature similar to 'foldM'.
+foldSavedEventsM :: (MonadIO m, Store store)
+            => store
+            -> StreamName
+            -> (s -> SavedEvent -> m s)
+            -> s
+            -> ExceptT ForEventFailure m s
+foldSavedEventsM store stream k seed = mapExceptT trans action
+  where
+    trans m = evalStateT m seed
+
+    action = do
+      forSavedEvents store stream $ \a -> do
+        s <- get
+        s' <- lift $ k s a
+        put s'
+      get
+
+--------------------------------------------------------------------------------
+-- | Like 'foldSavedEventsM' but expose signature similar to 'foldl'.
+foldSavedEvents :: (MonadIO m, Store store)
+           => store
+           -> StreamName
+           -> (s -> SavedEvent -> s)
+           -> s
+           -> ExceptT ForEventFailure m s
+foldSavedEvents store stream k seed =
+  foldSavedEventsM store stream (\s a -> return $ k s a) seed
 
 --------------------------------------------------------------------------------
 -- | Allows to easily iterate over a stream's events.
