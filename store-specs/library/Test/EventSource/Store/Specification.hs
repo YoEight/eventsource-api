@@ -148,16 +148,13 @@ specification store = do
         events = fmap TestEvent values
         seed   = Right (0, EventNumber 0)
         
-        testFold :: Either Text (Int, EventNumber) -> SavedEvent -> Either Text (Int, EventNumber)
         testFold (Left e) _           = Left e
         testFold (Right (a, n)) saved =
-          let
-            n' = eventNumber saved
-            ee = decodeEvent $ savedEvent saved
-          in
-            case ee of
-              Left t               -> Left t
-              Right (TestEvent a') -> Right (a + a', max n n')
+          let n' = eventNumber saved
+              ee = decodeEvent $ savedEvent saved in
+          case ee of
+            Left t               -> Left t
+            Right (TestEvent a') -> Right (a + a', max n n')
         
     name <- freshStreamName
     _ <- wait =<< appendEvents store name AnyVersion events

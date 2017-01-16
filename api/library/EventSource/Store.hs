@@ -131,11 +131,13 @@ foldSubAsync sub onEvent onError =
   async $ foldSub sub onEvent onError
 
 --------------------------------------------------------------------------------
+-- | Similar to 'foldSub' but provides access to the 'SavedEvent' instead of
+--   decoded event.
 foldSubSaved :: (MonadIO m)
-        => Subscription
-        -> (SavedEvent -> m ())
-        -> (SomeException -> m ())
-        -> m ()
+             => Subscription
+             -> (SavedEvent -> m ())
+             -> (SomeException -> m ())
+             -> m ()
 foldSubSaved sub onEvent onError = loop
   where
     loop = do
@@ -145,11 +147,11 @@ foldSubSaved sub onEvent onError = loop
         Right a -> onEvent a >> loop
 
 --------------------------------------------------------------------------------
-foldSubSavedAsync ::
-                Subscription
-             -> (SavedEvent -> IO ())
-             -> (SomeException -> IO ())
-             -> IO (Async ())
+-- | Asynchronous version of 'foldSubSaved'.
+foldSubSavedAsync :: Subscription
+                  -> (SavedEvent -> IO ())
+                  -> (SomeException -> IO ())
+                  -> IO (Async ())
 foldSubSavedAsync sub onEvent onError =
   async $ foldSubSaved sub onEvent onError
 
@@ -263,8 +265,8 @@ foldEvents store stream k seed =
   foldEventsM store stream (\s a -> return $ k s a) seed
 
 --------------------------------------------------------------------------------
--- | Like `forEvents` but provides access to SavedEvents instead of
---   decoded events.
+-- | Like `forEvents` but provides access to 'SavedEvent' instead of
+--   decoded event.
 forSavedEvents :: (MonadIO m, Store store)
                => store
                -> StreamName
@@ -283,11 +285,11 @@ forSavedEvents store name k = do
 --------------------------------------------------------------------------------
 -- | Like 'forSavedEvents' but expose signature similar to 'foldM'.
 foldSavedEventsM :: (MonadIO m, Store store)
-            => store
-            -> StreamName
-            -> (s -> SavedEvent -> m s)
-            -> s
-            -> ExceptT ForEventFailure m s
+                 => store
+                 -> StreamName
+                 -> (s -> SavedEvent -> m s)
+                 -> s
+                 -> ExceptT ForEventFailure m s
 foldSavedEventsM store stream k seed = mapExceptT trans action
   where
     trans m = evalStateT m seed
@@ -302,11 +304,11 @@ foldSavedEventsM store stream k seed = mapExceptT trans action
 --------------------------------------------------------------------------------
 -- | Like 'foldSavedEventsM' but expose signature similar to 'foldl'.
 foldSavedEvents :: (MonadIO m, Store store)
-           => store
-           -> StreamName
-           -> (s -> SavedEvent -> s)
-           -> s
-           -> ExceptT ForEventFailure m s
+                => store
+                -> StreamName
+                -> (s -> SavedEvent -> s)
+                -> s
+                -> ExceptT ForEventFailure m s
 foldSavedEvents store stream k seed =
   foldSavedEventsM store stream (\s a -> return $ k s a) seed
 
