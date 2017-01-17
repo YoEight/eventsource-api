@@ -127,6 +127,45 @@ specification store = do
 
     st `shouldBe` (10 :: Int)
 
+  specify "API - forSavedEvents" $ do
+    let events = fmap TestEvent [0..9]
+    name <- freshStreamName
+    _ <- wait =<< appendEvents store name AnyVersion events
+
+    let action = do
+          forSavedEvents store name $ \(_ :: SavedEvent) -> modify incr
+          get
+
+    res <- runExceptT $ mapExceptT (\m -> evalStateT m 0) action
+
+    res `shouldSatisfy` either (const False) (const True)
+    let Right st = res
+
+    st `shouldBe` (10 :: Int)
+
+  specify "API - foldSavedEvents" $ do
+    let values = [0..9]
+        events = fmap TestEvent values
+        seed   = Right (0, EventNumber 0)
+        
+        testFold (Left e) _           = Left e
+        testFold (Right (a, n)) saved =
+          let n' = eventNumber saved
+              ee = decodeEvent $ savedEvent saved in
+          case ee of
+            Left t               -> Left t
+            Right (TestEvent a') -> Right (a + a', max n n')
+        
+    name <- freshStreamName
+    _ <- wait =<< appendEvents store name AnyVersion events
+
+    res <- runExceptT $ foldSavedEvents store name testFold seed
+
+    res `shouldSatisfy` either (const False) (const True)
+    let Right st = res
+
+    st `shouldBe` Right (sum values, EventNumber 9)
+
   specify "API - Iterator.readAllEvents" $ do
     let events = fmap TestEvent [0..9]
     name <- freshStreamName
