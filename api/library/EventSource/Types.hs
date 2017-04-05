@@ -152,6 +152,17 @@ properties (Properties m) = M.toList m
 newtype EventId = EventId UUID deriving (Eq, Ord)
 
 --------------------------------------------------------------------------------
+instance ToJSON EventId where
+  toJSON (EventId u) = toJSON (toText u)
+
+--------------------------------------------------------------------------------
+instance FromJSON EventId where
+  parseJSON = withText "EventId" $ \t ->
+    case fromText t of
+      Just u  -> return $ EventId u
+      Nothing -> mzero
+
+--------------------------------------------------------------------------------
 instance Show EventId where
   show (EventId uuid) = show uuid
 
@@ -162,7 +173,7 @@ freshEventId = fmap EventId $ liftIO nextRandom
 
 --------------------------------------------------------------------------------
 -- | Represents a stream name.
-newtype StreamName = StreamName Text deriving (Eq, Ord)
+newtype StreamName = StreamName Text deriving (Eq, Ord, ToJSON, FromJSON)
 
 --------------------------------------------------------------------------------
 instance Show StreamName where
@@ -174,7 +185,7 @@ instance IsString StreamName where
 
 --------------------------------------------------------------------------------
 -- | Used to identity the type of an 'Event'.
-newtype EventType = EventType Text deriving Eq
+newtype EventType = EventType Text deriving (Eq, ToJSON, FromJSON)
 
 --------------------------------------------------------------------------------
 instance Show EventType where
@@ -215,7 +226,8 @@ data Event =
 
 --------------------------------------------------------------------------------
 -- | Represents an event index in a stream.
-newtype EventNumber = EventNumber Int32 deriving (Eq, Ord, Num, Enum, Show)
+newtype EventNumber = EventNumber Int32
+  deriving (Eq, Ord, Num, Enum, Show, FromJSON, ToJSON)
 
 --------------------------------------------------------------------------------
 -- | Represents an event that's saved into the event store.
@@ -260,6 +272,10 @@ newtype DecodeEventException = DecodeEventException Text deriving Show
 instance Exception DecodeEventException
 
 --------------------------------------------------------------------------------
+instance EncodeEvent Event where
+  encodeEvent e = put e
+
+--------------------------------------------------------------------------------
 instance DecodeEvent Event where
   decodeEvent = Right
 
@@ -275,7 +291,7 @@ data ExpectedVersion
     -- Stream should exist.
   | ExactVersion EventNumber
     -- Stream should be at givent event number.
-  deriving Show
+  deriving (Show, Eq)
 
 --------------------------------------------------------------------------------
 -- | Statuses you can get on every read attempt.

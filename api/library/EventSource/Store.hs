@@ -215,6 +215,9 @@ data ForEventFailure
   deriving Show
 
 --------------------------------------------------------------------------------
+instance Exception ForEventFailure
+
+--------------------------------------------------------------------------------
 -- | Iterates over all events of stream given a starting point and a batch size.
 forEvents :: (MonadIO m, DecodeEvent a, Store store)
           => store
