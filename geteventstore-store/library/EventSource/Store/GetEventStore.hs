@@ -73,21 +73,27 @@ toGesEvent e = GES.createEvent (GES.UserDefined typ) (Just eid) eventData
 
 --------------------------------------------------------------------------------
 fromGesEvent :: GES.ResolvedEvent -> SavedEvent
-fromGesEvent e = saved
+fromGesEvent e@(GES.ResolvedEvent recEvt lnkEvt _) = saved
   where
-    re = GES.resolvedEventOriginal e
-    eid = EventId $ GES.recordedEventId re
-    etyp = EventType $ GES.recordedEventType re
-    num = GES.recordedEventNumber re
-    payload = GES.recordedEventData re
-    metaBytes = GES.recordedEventMetadata re
-    event = Event { eventType = etyp
-                  , eventId = eid
-                  , eventPayload = dataFromBytes payload
-                  , eventMetadata = decodeStrict =<< metaBytes
-                  }
-    saved = SavedEvent { eventNumber = EventNumber num
-                       , savedEvent = event
+    re =
+      case recEvt of
+        Just result -> result
+        _           -> GES.resolvedEventOriginal e
+
+    make evt =
+      let eid = EventId $ GES.recordedEventId evt
+          etyp = EventType $ GES.recordedEventType evt
+          payload = GES.recordedEventData evt
+          metaBytes = GES.recordedEventMetadata evt in
+      Event { eventType = etyp
+            , eventId = eid
+            , eventPayload = dataFromBytes payload
+            , eventMetadata = decodeStrict =<< metaBytes
+            }
+
+    saved = SavedEvent { eventNumber = EventNumber $ GES.recordedEventNumber re
+                       , savedEvent = make re
+                       , linkEvent = fmap make lnkEvt
                        }
 
 --------------------------------------------------------------------------------

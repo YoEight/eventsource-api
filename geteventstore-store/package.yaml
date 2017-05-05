@@ -18,7 +18,7 @@ library:
   - base >=4.9 && <5
   - protolude >=0.1.10 && <0.2
   - eventstore ==0.14.*
-  - eventsource-api ==1.*
+  - eventsource-api >= 1.1
   - aeson
   - mtl
   source-dirs: library
@@ -45,4 +45,4 @@ tests:
     - -with-rtsopts=-N
     main: Main.hs
     source-dirs: test-suite
-version: '1.0.0'
+version: '1.0.1'

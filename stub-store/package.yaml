@@ -16,7 +16,7 @@ library:
     - NoImplicitPrelude
   dependencies:
   - base >=4.9 && <5
-  - eventsource-api ==1.*
+  - eventsource-api >=1.1
   - protolude >=0.1.10 && <0.2
   - containers
   - mtl
@@ -43,4 +43,4 @@ tests:
     - -with-rtsopts=-N
     main: Main.hs
     source-dirs: test-suite
-version: '1.0.0'
+version: '1.0.1'

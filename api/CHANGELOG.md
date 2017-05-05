@@ -1,3 +1,7 @@
+1.1.0
+=====
+  * Add `linkEvent` to `SavedEvent`.
+
 1.0.2
 =====
   * Implement essential typesclasses

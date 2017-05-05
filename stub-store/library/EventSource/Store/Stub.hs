@@ -89,7 +89,7 @@ appendStream = flip $ foldl' go
       let num = streamNextNumber s
           evts = streamEvents s in
       s { streamNextNumber = num + 1
-        , streamEvents = evts |> SavedEvent num e
+        , streamEvents = evts |> SavedEvent num e Nothing
         }
 
 --------------------------------------------------------------------------------
@@ -143,7 +143,7 @@ instance Store StubStore where
 
           -- This part is already performed in 'appendStream' but difficult
           -- to take its logic apart from building 'SavedEvent's.
-          let saved = uncurry SavedEvent <$> zip [0..] events
+          let saved = (\(num, evt) -> SavedEvent num evt Nothing) <$> zip [0..] events
           notifySubs self name saved
           let Just last = getLast $ foldMap (Last . Just) saved
               nextNum = eventNumber last + 1
@@ -169,7 +169,7 @@ instance Store StubStore where
 
           -- This part is already performed in 'appendStream' but difficult
           -- to take its logic apart from building 'SavedEvent's.
-          let saved = uncurry SavedEvent <$> zip [currentNumber..] events
+          let saved = (\(num, evt) -> SavedEvent num evt Nothing) <$> zip [currentNumber..] events
           notifySubs self name saved
           let Just last = getLast $ foldMap (Last . Just) saved
               nextNum = eventNumber last + 1

@@ -234,6 +234,7 @@ newtype EventNumber = EventNumber Int32
 data SavedEvent =
   SavedEvent { eventNumber :: EventNumber
              , savedEvent :: Event
+             , linkEvent :: Maybe Event
              } deriving Show
 
 --------------------------------------------------------------------------------
