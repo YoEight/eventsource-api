@@ -1,4 +1,9 @@
-1.0.1
+1.0.3
+=====
+* Bump protolude version
+
+
+1.0.2
 =====
 * Fix GHC 8.2.1 and Stackage LTS-9 build.
 
