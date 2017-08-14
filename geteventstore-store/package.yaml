@@ -17,7 +17,7 @@ library:
   dependencies:
   - base >=4.9 && <5
   - protolude >=0.1.10 && <0.2
-  - eventstore ==0.14.*
+  - eventstore >=0.14 && <0.16
   - eventsource-api >= 1.1
   - aeson
   - mtl

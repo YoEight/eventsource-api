@@ -123,19 +123,23 @@ defaultBatchSize :: Int32
 defaultBatchSize = 500
 
 --------------------------------------------------------------------------------
+toGESStreamName :: StreamName -> GES.StreamName
+toGESStreamName (StreamName name) = GES.StreamName name
+
+--------------------------------------------------------------------------------
 instance Store GetEventStore where
-  appendEvents (GetEventStore conn) (StreamName name) ver xs = liftIO $ do
+  appendEvents (GetEventStore conn) name ver xs = liftIO $ do
     events <- traverse makeEvent xs
-    w <- GES.sendEvents conn name (toGesExpVer ver) events
+    w <- GES.sendEvents conn (toGESStreamName name) (toGesExpVer ver) events
     return $ fmap (EventNumber . GES.writeNextExpectedVersion) w
 
-  readBatch (GetEventStore conn) (StreamName name) b = liftIO $ do
+  readBatch (GetEventStore conn) name b = liftIO $ do
     let EventNumber n = batchFrom b
-    w <- GES.readStreamEventsForward conn name n (batchSize b) True
+    w <- GES.readStreamEventsForward conn (toGESStreamName name) n (batchSize b) True
     return $ fmap (fmap fromGesSlice . fromGesReadResult) w
 
-  subscribe (GetEventStore conn) (StreamName name) = liftIO $ do
-    sub <- GES.subscribe conn name True
+  subscribe (GetEventStore conn) name = liftIO $ do
+    sub <- GES.subscribe conn (toGESStreamName name) True
     sid <- freshSubscriptionId
 
     return $ Subscription sid $ liftIO $
