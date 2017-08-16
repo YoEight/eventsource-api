@@ -15,7 +15,8 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-7.14
+resolver: nightly-2017-08-15
+compiler: ghc-8.2.1
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -42,9 +43,7 @@ packages:
 - 'geteventstore-store'
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps: [ eventstore-0.14.0.0
-            , http-client-0.5.4
-            ]
+extra-deps: [ protolude-0.2 ]
 
 # Override default flag values for local packages and extra-deps
 flags: {}

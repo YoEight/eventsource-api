@@ -17,7 +17,7 @@ library:
   dependencies:
   - base >=4.9 && <5
   - eventsource-api >=1.1
-  - protolude >=0.1.10 && <0.2
+  - protolude >=0.1.10 && <0.3
   - containers
   - mtl
   - stm
@@ -37,10 +37,12 @@ tests:
     - tasty
     - tasty-hspec
     - protolude
+    - aeson
+    - eventsource-api
     ghc-options:
     - -rtsopts
     - -threaded
     - -with-rtsopts=-N
     main: Main.hs
     source-dirs: test-suite
-version: '1.0.1'
+version: '1.0.2'

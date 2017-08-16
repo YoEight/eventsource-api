@@ -1,3 +1,7 @@
+1.0.4
+=====
+* Fix Stackage build.
+
 1.0.3
 =====
 * Bump protolude version

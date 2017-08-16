@@ -21,7 +21,6 @@ module EventSource.Store.GetEventStore
 --------------------------------------------------------------------------------
 import           Protolude
 import           Data.Aeson
-import           Data.Aeson.Types
 import qualified Database.EventStore as GES
 import           EventSource
 
@@ -117,10 +116,6 @@ fromGesReadResult (GES.ReadError e) =
   ReadFailure $ ReadError e
 fromGesReadResult (GES.ReadAccessDenied _) =
   ReadFailure AccessDenied
-
---------------------------------------------------------------------------------
-defaultBatchSize :: Int32
-defaultBatchSize = 500
 
 --------------------------------------------------------------------------------
 toGESStreamName :: StreamName -> GES.StreamName

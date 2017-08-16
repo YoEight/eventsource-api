@@ -14,9 +14,9 @@
 module Test.EventSource.Event where
 
 --------------------------------------------------------------------------------
-import ClassyPrelude
 import Data.Aeson.Types
 import EventSource
+import Protolude
 
 --------------------------------------------------------------------------------
 newtype TestEvent = TestEvent Int deriving (Eq, Show)
