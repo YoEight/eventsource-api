@@ -187,6 +187,10 @@ class Store store where
   -- | Subscribes to given stream.
   subscribe :: MonadIO m => store -> StreamName -> m Subscription
 
+  -- | Encapsulates to an abstract store.
+  toStore :: store -> SomeStore
+  toStore = SomeStore
+
 --------------------------------------------------------------------------------
 -- | Utility type to pass any store that implements 'Store' typeclass.
 data SomeStore = forall store. Store store => SomeStore store
