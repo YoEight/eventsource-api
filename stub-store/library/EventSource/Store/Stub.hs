@@ -179,7 +179,7 @@ instance Store StubStore where
   readBatch StubStore{..} name (Batch start _) = liftIO $ async $ atomically $ do
     streamMap <- readTVar _streams
     case M.lookup name streamMap of
-      Nothing -> return $ ReadFailure StreamNotFound
+      Nothing -> return $ ReadFailure $ StreamNotFound name
       Just stream -> do
         let events = S.filter ((>= start) . eventNumber) $ streamEvents stream
             slice = Slice { sliceEvents = toList events

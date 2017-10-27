@@ -316,9 +316,9 @@ isReadFailure _ = False
 --------------------------------------------------------------------------------
 -- | Represents the different kind of failure you can get when reading.
 data ReadFailure
-  = StreamNotFound
+  = StreamNotFound StreamName
   | ReadError (Maybe Text)
-  | AccessDenied
+  | AccessDenied StreamName
   deriving Show
 
 --------------------------------------------------------------------------------

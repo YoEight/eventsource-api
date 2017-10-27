@@ -103,19 +103,19 @@ fromGesSlice s = Slice { sliceEvents = fromGesEvent <$> GES.sliceEvents s
                        }
 
 --------------------------------------------------------------------------------
-fromGesReadResult :: GES.ReadResult t a -> ReadStatus a
-fromGesReadResult (GES.ReadSuccess a) =
+fromGesReadResult :: StreamName -> GES.ReadResult t a -> ReadStatus a
+fromGesReadResult _ (GES.ReadSuccess a) =
   ReadSuccess a
-fromGesReadResult GES.ReadNoStream =
-  ReadFailure StreamNotFound
-fromGesReadResult (GES.ReadStreamDeleted _) =
-  ReadFailure StreamNotFound
-fromGesReadResult GES.ReadNotModified =
+fromGesReadResult n GES.ReadNoStream =
+  ReadFailure $ StreamNotFound n
+fromGesReadResult n (GES.ReadStreamDeleted _) =
+  ReadFailure $ StreamNotFound n
+fromGesReadResult _ GES.ReadNotModified =
   ReadFailure (ReadError $ Just "not modified")
-fromGesReadResult (GES.ReadError e) =
+fromGesReadResult _ (GES.ReadError e) =
   ReadFailure $ ReadError e
-fromGesReadResult (GES.ReadAccessDenied _) =
-  ReadFailure AccessDenied
+fromGesReadResult n (GES.ReadAccessDenied _) =
+  ReadFailure $ AccessDenied n
 
 --------------------------------------------------------------------------------
 toGESStreamName :: StreamName -> GES.StreamName
@@ -131,7 +131,7 @@ instance Store GetEventStore where
   readBatch (GetEventStore conn) name b = liftIO $ do
     let EventNumber n = batchFrom b
     w <- GES.readStreamEventsForward conn (toGESStreamName name) n (batchSize b) True
-    return $ fmap (fmap fromGesSlice . fromGesReadResult) w
+    return $ fmap (fmap fromGesSlice . fromGesReadResult name) w
 
   subscribe (GetEventStore conn) name = liftIO $ do
     sub <- GES.subscribe conn (toGESStreamName name) True
