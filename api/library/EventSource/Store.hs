@@ -46,11 +46,14 @@ module EventSource.Store
 import Prelude (Show(..))
 
 --------------------------------------------------------------------------------
+import Control.Concurrent.Async.Lifted hiding (wait)
+import Control.Monad.Base
+import Control.Monad.Trans.Control
 import Control.Monad.Except
 import Data.IORef
 import Data.UUID
 import Data.UUID.V4
-import Protolude hiding (from, show, trans)
+import Protolude hiding (from, show, trans, async)
 
 --------------------------------------------------------------------------------
 import EventSource.Types
@@ -82,13 +85,13 @@ freshSubscriptionId = liftIO $ fmap SubscriptionId nextRandom
 data Subscription =
   Subscription { subscriptionId :: SubscriptionId
 
-               , nextEvent :: forall m. MonadIO m
+               , nextEvent :: forall m. MonadBase IO m
                            => m (Either SomeException SavedEvent)
                }
 
 --------------------------------------------------------------------------------
 -- | Waits for the next event and deserializes it on the go.
-nextEventAs :: (DecodeEvent a, MonadIO m)
+nextEventAs :: (DecodeEvent a, MonadBase IO m)
             => Subscription
             -> m (Either SomeException a)
 nextEventAs sub = do
@@ -107,7 +110,7 @@ nextEventAs sub = do
 --   'SomeException' is used because we let the underlying subscription model
 --   exposed its own 'Exception'. If the callback that handles incoming events
 --   throws an exception, it will not be catch by the error callback.
-foldSub :: (DecodeEvent a, MonadIO m)
+foldSub :: (DecodeEvent a, MonadBase IO m)
         => Subscription
         -> (a -> m ())
         -> (SomeException -> m ())
@@ -122,18 +125,18 @@ foldSub sub onEvent onError = loop
 
 --------------------------------------------------------------------------------
 -- | Asynchronous version of 'foldSub'.
-foldSubAsync :: DecodeEvent a
+foldSubAsync :: (MonadBaseControl IO m, DecodeEvent a)
              => Subscription
-             -> (a -> IO ())
-             -> (SomeException -> IO ())
-             -> IO (Async ())
+             -> (a -> m ())
+             -> (SomeException -> m ())
+             -> m (Async (StM m ()))
 foldSubAsync sub onEvent onError =
   async $ foldSub sub onEvent onError
 
 --------------------------------------------------------------------------------
 -- | Similar to 'foldSub' but provides access to the 'SavedEvent' instead of
 --   decoded event.
-foldSubSaved :: (MonadIO m)
+foldSubSaved :: MonadBase IO m
              => Subscription
              -> (SavedEvent -> m ())
              -> (SomeException -> m ())
@@ -148,10 +151,11 @@ foldSubSaved sub onEvent onError = loop
 
 --------------------------------------------------------------------------------
 -- | Asynchronous version of 'foldSubSaved'.
-foldSubSavedAsync :: Subscription
-                  -> (SavedEvent -> IO ())
-                  -> (SomeException -> IO ())
-                  -> IO (Async ())
+foldSubSavedAsync :: MonadBaseControl IO m
+                  => Subscription
+                  -> (SavedEvent -> m ())
+                  -> (SomeException -> m ())
+                  -> m (Async (StM m ()))
 foldSubSavedAsync sub onEvent onError =
   async $ foldSubSaved sub onEvent onError
 

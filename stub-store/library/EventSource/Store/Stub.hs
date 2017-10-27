@@ -23,11 +23,12 @@ module EventSource.Store.Stub
   ) where
 
 --------------------------------------------------------------------------------
-import Control.Concurrent.STM
+import           Control.Concurrent.STM
+import           Control.Monad.Base
 import qualified Data.Map.Strict as M
-import Data.Sequence (Seq, (|>))
+import           Data.Sequence (Seq, (|>))
 import qualified Data.Sequence as S
-import Protolude
+import           Protolude
 
 --------------------------------------------------------------------------------
 import EventSource.Store
@@ -193,7 +194,7 @@ instance Store StubStore where
     sid <- freshSubscriptionId
     liftIO $ atomically $ do
       chan <- newTChan
-      let sub = Subscription sid $ liftIO $ atomically $ do
+      let sub = Subscription sid $ liftBase $ atomically $ do
             saved <- readTChan chan
             return $ Right saved
 

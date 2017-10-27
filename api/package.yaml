@@ -21,6 +21,9 @@ library:
     - mtl
     - containers
     - unordered-containers
+    - lifted-async
+    - monad-control
+    - transformers-base
   source-dirs: library
 license: BSD3
 license-file: LICENSE.md

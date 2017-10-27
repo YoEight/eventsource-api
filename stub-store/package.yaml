@@ -20,6 +20,7 @@ library:
   - containers
   - mtl
   - stm
+  - transformers-base
   source-dirs: library
 license: BSD3
 license-file: LICENSE.md

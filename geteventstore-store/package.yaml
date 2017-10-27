@@ -20,6 +20,7 @@ library:
   - eventsource-api >= 1.1
   - aeson
   - mtl
+  - transformers-base
   source-dirs: library
 license: BSD3
 license-file: LICENSE.md

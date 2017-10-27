@@ -20,6 +20,7 @@ module EventSource.Store.GetEventStore
 
 --------------------------------------------------------------------------------
 import           Protolude
+import           Control.Monad.Base
 import           Data.Aeson
 import qualified Database.EventStore as GES
 import           EventSource
@@ -137,7 +138,7 @@ instance Store GetEventStore where
     sub <- GES.subscribe conn (toGESStreamName name) True
     sid <- freshSubscriptionId
 
-    return $ Subscription sid $ liftIO $
+    return $ Subscription sid $ liftBase $
       try $ fmap fromGesEvent $ GES.nextEvent sub
 
 --------------------------------------------------------------------------------
