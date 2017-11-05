@@ -22,6 +22,7 @@ library:
     - containers
     - unordered-containers
     - lifted-async
+    - lifted-base
     - monad-control
     - transformers-base
     - exceptions
