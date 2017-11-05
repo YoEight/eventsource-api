@@ -1,5 +1,6 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE LambdaCase                #-}
 {-# LANGUAGE Rank2Types                #-}
 --------------------------------------------------------------------------------
 -- |
@@ -40,6 +41,7 @@ module EventSource.Store
   , foldSubSaved
   , foldSubSavedAsync
   , ForEventFailure(..)
+  , unhandled
   ) where
 
 --------------------------------------------------------------------------------
@@ -48,6 +50,7 @@ import Prelude (Show(..))
 --------------------------------------------------------------------------------
 import Control.Concurrent.Async.Lifted hiding (wait)
 import Control.Monad.Base
+import Control.Monad.Catch
 import Control.Monad.Trans.Control
 import Control.Monad.Except
 import Data.IORef
@@ -174,7 +177,7 @@ instance Exception ExpectedVersionException
 --   an event store.
 class Store store where
   -- | Appends a batch of events at the end of a stream.
-  appendEvents :: (EncodeEvent a, MonadIO m)
+  appendEvents :: (EncodeEvent a, MonadBase IO m)
                => store
                -> StreamName
                -> ExpectedVersion
@@ -182,14 +185,14 @@ class Store store where
                -> m (Async EventNumber)
 
   -- | Appends a batch of events at the end of a stream.
-  readBatch :: MonadIO m
+  readBatch :: MonadBase IO m
             => store
             -> StreamName
             -> Batch
             -> m (Async (ReadStatus Slice))
 
   -- | Subscribes to given stream.
-  subscribe :: MonadIO m => store -> StreamName -> m Subscription
+  subscribe :: MonadBase IO m => store -> StreamName -> m Subscription
 
   -- | Encapsulates to an abstract store.
   toStore :: store -> SomeStore
@@ -207,7 +210,7 @@ instance Store SomeStore where
 
 --------------------------------------------------------------------------------
 -- | Appends a single event at the end of a stream.
-appendEvent :: (EncodeEvent a, MonadIO m, Store store)
+appendEvent :: (EncodeEvent a, MonadBase IO m, Store store)
             => store
             -> StreamName
             -> ExpectedVersion
@@ -227,7 +230,7 @@ instance Exception ForEventFailure
 
 --------------------------------------------------------------------------------
 -- | Iterates over all events of stream given a starting point and a batch size.
-forEvents :: (MonadIO m, DecodeEvent a, Store store)
+forEvents :: (MonadBase IO m, DecodeEvent a, Store store)
           => store
           -> StreamName
           -> (a -> m ())
@@ -247,7 +250,7 @@ forEvents store name k = do
 
 --------------------------------------------------------------------------------
 -- | Like 'forEvents' but expose signature similar to 'foldM'.
-foldEventsM :: (MonadIO m, DecodeEvent a, Store store)
+foldEventsM :: (MonadBase IO m, DecodeEvent a, Store store)
             => store
             -> StreamName
             -> (s -> a -> m s)
@@ -266,7 +269,7 @@ foldEventsM store stream k seed = mapExceptT trans action
 
 --------------------------------------------------------------------------------
 -- | Like 'foldEventsM' but expose signature similar to 'foldl'.
-foldEvents :: (MonadIO m, DecodeEvent a, Store store)
+foldEvents :: (MonadBase IO m, DecodeEvent a, Store store)
            => store
            -> StreamName
            -> (s -> a -> s)
@@ -278,7 +281,7 @@ foldEvents store stream k seed =
 --------------------------------------------------------------------------------
 -- | Like `forEvents` but provides access to 'SavedEvent' instead of
 --   decoded event.
-forSavedEvents :: (MonadIO m, Store store)
+forSavedEvents :: (MonadBase IO m, Store store)
                => store
                -> StreamName
                -> (SavedEvent -> m ())
@@ -295,7 +298,7 @@ forSavedEvents store name k = do
 
 --------------------------------------------------------------------------------
 -- | Like 'forSavedEvents' but expose signature similar to 'foldM'.
-foldSavedEventsM :: (MonadIO m, Store store)
+foldSavedEventsM :: (MonadBase IO m, Store store)
                  => store
                  -> StreamName
                  -> (s -> SavedEvent -> m s)
@@ -314,7 +317,7 @@ foldSavedEventsM store stream k seed = mapExceptT trans action
 
 --------------------------------------------------------------------------------
 -- | Like 'foldSavedEventsM' but expose signature similar to 'foldl'.
-foldSavedEvents :: (MonadIO m, Store store)
+foldSavedEvents :: (MonadBase IO m, Store store)
                 => store
                 -> StreamName
                 -> (s -> SavedEvent -> s)
@@ -324,9 +327,16 @@ foldSavedEvents store stream k seed =
   foldSavedEventsM store stream (\s a -> return $ k s a) seed
 
 --------------------------------------------------------------------------------
+-- | Throws an exception in case 'ExceptT' was a 'Left'.
+unhandled :: (MonadThrow m, Exception e) => ExceptT e m a -> m a
+unhandled m = runExceptT m >>= \case
+  Left e  -> throwM e
+  Right a -> pure a
+
+--------------------------------------------------------------------------------
 -- | Allows to easily iterate over a stream's events.
 newtype StreamIterator =
-  StreamIterator { iteratorNext :: forall m. MonadIO m => m (Maybe SavedEvent) }
+  StreamIterator { iteratorNext :: forall m. MonadBase IO m => m (Maybe SavedEvent) }
 
 --------------------------------------------------------------------------------
 instance Show StreamIterator where
@@ -335,7 +345,7 @@ instance Show StreamIterator where
 --------------------------------------------------------------------------------
 -- | Reads the next available event from the 'StreamIterator' and try to
 --   deserialize it at the same time.
-iteratorNextEvent :: (DecodeEvent a, MonadIO m, MonadPlus m)
+iteratorNextEvent :: (DecodeEvent a, MonadBase IO m, MonadPlus m)
                   => StreamIterator
                   -> m (Maybe a)
 iteratorNextEvent i = do
@@ -349,7 +359,7 @@ iteratorNextEvent i = do
 
 --------------------------------------------------------------------------------
 -- | Reads all events from the 'StreamIterator' until reaching end of stream.
-iteratorReadAll :: MonadIO m => StreamIterator -> m [SavedEvent]
+iteratorReadAll :: MonadBase IO m => StreamIterator -> m [SavedEvent]
 iteratorReadAll i = do
   res <- iteratorNext i
   case res of
@@ -358,7 +368,7 @@ iteratorReadAll i = do
 
 --------------------------------------------------------------------------------
 -- | Like 'iteratorReadAll' but try to deserialize the events at the same time.
-iteratorReadAllEvents :: (DecodeEvent a, MonadIO m, MonadPlus m)
+iteratorReadAllEvents :: (DecodeEvent a, MonadBase IO m, MonadPlus m)
                       => StreamIterator
                       -> m [a]
 iteratorReadAllEvents i = do
@@ -370,15 +380,15 @@ iteratorReadAllEvents i = do
 --------------------------------------------------------------------------------
 -- | Returns a 'StreamIterator' for the given stream name. The returned
 --   'StreamIterator' IS NOT THREADSAFE.
-streamIterator :: (Store store, MonadIO m)
+streamIterator :: (Store store, MonadBase IO m)
                => store
                -> StreamName
                -> m (ReadStatus StreamIterator)
 streamIterator store name = do
   w <- readBatch store name (startFrom 0)
-  res <- liftIO $ wait w
+  res <- liftBase $ wait w
   for res $ \slice -> do
-    ref <- liftIO $ newIORef $ IteratorOverAvailable slice
+    ref <- liftBase $ newIORef $ IteratorOverAvailable slice
     return $ StreamIterator $ iterateOver store ref name
 
 --------------------------------------------------------------------------------
@@ -393,7 +403,7 @@ data IteratorOverAction
   | IteratorOverEndOfStream
 
 --------------------------------------------------------------------------------
-iterateOver :: (Store store, MonadIO m)
+iterateOver :: (Store store, MonadBase IO m)
             => store
             -> IORef IteratorOverState
             -> StreamName
@@ -401,7 +411,7 @@ iterateOver :: (Store store, MonadIO m)
 iterateOver store ref name = go
   where
     go = do
-      action <- liftIO $ atomicModifyIORef' ref $ \st ->
+      action <- liftBase $ atomicModifyIORef' ref $ \st ->
         case st of
           IteratorOverAvailable slice ->
             case sliceEvents slice of
@@ -422,12 +432,12 @@ iterateOver store ref name = go
         IteratorOverEndOfStream -> return Nothing
         IteratorOverNextBatch num -> do
           w <- readBatch store name (startFrom num)
-          res <- liftIO $ wait w
+          res <- liftBase $ wait w
           case res of
             ReadFailure _ -> do
-              liftIO $ atomicModifyIORef' ref $ \_ -> (IteratorOverClosed, ())
+              liftBase $ atomicModifyIORef' ref $ \_ -> (IteratorOverClosed, ())
               return Nothing
             ReadSuccess slice -> do
               let nxtSt = IteratorOverAvailable slice
-              liftIO $ atomicModifyIORef' ref $ \_ -> (nxtSt, ())
+              liftBase $ atomicModifyIORef' ref $ \_ -> (nxtSt, ())
               go
