@@ -14,7 +14,31 @@
 -- Implementation of an aggregate abstraction.
 -- Link: https://en.wikipedia.org/wiki/Domain-driven_design.
 --------------------------------------------------------------------------------
-module EventSource.Aggregate where
+module EventSource.Aggregate
+  ( StreamId(..)
+  -- * Aggregate
+  , Aggregate(..)
+  , Validate(..)
+  , Decision
+  , Agg
+  , aggId
+  , runAgg
+  , newAgg
+  -- * Interactions
+  , submitCmd
+  , submitEvt
+  , snapshot
+  , execute
+  -- * Internal
+  , Action'(..)
+  , Action
+  , askEnv
+  , getState
+  , putState
+  , AggEnv(..)
+  , AggState(..)
+  , persist
+  ) where
 
 --------------------------------------------------------------------------------
 import Control.Concurrent.Lifted
@@ -203,17 +227,17 @@ submitCmd :: (Validate a, MonadBase IO (M a), StreamId (Id a), EncodeEvent (Evt 
           => Agg a
           -> Cmd a
           -> M a (Decision a)
-submitCmd agg cmd = execute agg (_SubmitCmd cmd)
+submitCmd agg cmd = execute agg (submitCmdAction cmd)
 
 --------------------------------------------------------------------------------
 -- | Submits an event. The aggregate will update its internal state accondingly.
 submitEvt :: (Aggregate a, MonadBase IO (M a)) => Agg a -> Evt a -> M a ()
-submitEvt agg evt = execute agg (_SubmitEvt evt)
+submitEvt agg evt = execute agg (submitEvtAction evt)
 
 --------------------------------------------------------------------------------
 -- | Returns current aggregate state.
 snapshot :: MonadBase IO (M a) => Agg a -> M a a
-snapshot agg = execute agg _Snapshot
+snapshot agg = execute agg snapshotAction
 
 --------------------------------------------------------------------------------
 -- | Executes an action.
@@ -237,10 +261,10 @@ persist store aid ver event =
 --------------------------------------------------------------------------------
 -- // Internal commands.
 --------------------------------------------------------------------------------
-_SubmitCmd :: (Validate a, MonadBase IO (M a), StreamId (Id a), EncodeEvent (Evt a))
-           => Cmd a
-           -> Action a (Decision a)
-_SubmitCmd cmd = do
+submitCmdAction :: (Validate a, MonadBase IO (M a), StreamId (Id a), EncodeEvent (Evt a))
+                => Cmd a
+                -> Action a (Decision a)
+submitCmdAction cmd = do
   env    <- askEnv
   s      <- getState
   result <- lift $ validate (aggState s) cmd
@@ -254,18 +278,18 @@ _SubmitCmd cmd = do
        let s' = s { aggStateVersion = ExactVersion next }
 
        putState s'
-       _SubmitEvt event
+       submitEvtAction event
 
   pure result
 
 --------------------------------------------------------------------------------
-_SubmitEvt :: (Aggregate a, Monad (M a)) => Evt a -> Action a ()
-_SubmitEvt event = do
+submitEvtAction :: (Aggregate a, Monad (M a)) => Evt a -> Action a ()
+submitEvtAction event = do
   s  <- getState
   a' <- lift $ apply (aggState s) event
   let s' = s { aggState = a' }
   putState s'
 
 --------------------------------------------------------------------------------
-_Snapshot :: Monad (M a) => Action a a
-_Snapshot = fmap aggState getState
+snapshotAction :: Monad (M a) => Action a a
+snapshotAction = fmap aggState getState

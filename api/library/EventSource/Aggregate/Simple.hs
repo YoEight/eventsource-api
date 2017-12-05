@@ -15,6 +15,7 @@ module EventSource.Aggregate.Simple
   ( AggIO
   , AggregateIO(..)
   , ValidateIO(..)
+  , Simple
   , newAgg
   , submitCmd
   , submitEvt
@@ -59,7 +60,7 @@ class AggregateIO event state => ValidateIO command event state | command -> sta
 
   -- | Validates a command. If the command validation succeeds, it will emits
   --   an event. Otherwise, it will returns an error.
-  validateIO :: a -> command -> IO (Either SomeException event)
+  validateIO :: state -> command -> IO (Either SomeException event)
 
 --------------------------------------------------------------------------------
 instance AggregateIO event state => Self.Aggregate (Simple id command event state) where
