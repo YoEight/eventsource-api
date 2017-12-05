@@ -62,7 +62,7 @@ type Decision a = Either (Err a) (Evt a)
 --   validation can receive command and decide if it was valid or not. When the
 --   validation is successful, The aggregate emits an event that will be
 --   persisted and pass to 'apply' function.
-class (Aggregate a, StreamId (Id a), EncodeEvent (Evt a)) => Validated a where
+class Aggregate a => Validate a where
   -- | Type of command supported by the aggregate.
   type Cmd a :: *
 
@@ -174,7 +174,7 @@ data Msg a where
 
 --------------------------------------------------------------------------------
 -- | Creates a new aggregate given an eventstore handle, an id and an initial
--- state.
+--   state.
 newAgg :: (Aggregate a, MonadBaseControl IO (M a))
        => SomeStore
        -> Id a
@@ -199,7 +199,10 @@ newAgg store aId seed = do
 -- an event otherwise an error. In case of a valid command, the aggregate
 -- persist the resulting event to the eventstore. The aggregate will also
 -- update its internal state accordingly.
-submitCmd :: (Validated a, MonadBase IO (M a)) => Agg a -> Cmd a -> M a (Decision a)
+submitCmd :: (Validate a, MonadBase IO (M a), StreamId (Id a), EncodeEvent (Evt a))
+          => Agg a
+          -> Cmd a
+          -> M a (Decision a)
 submitCmd agg cmd = execute agg (_SubmitCmd cmd)
 
 --------------------------------------------------------------------------------
@@ -234,7 +237,9 @@ persist store aid ver event =
 --------------------------------------------------------------------------------
 -- // Internal commands.
 --------------------------------------------------------------------------------
-_SubmitCmd :: (Validated a, MonadBase IO (M a)) => Cmd a -> Action a (Decision a)
+_SubmitCmd :: (Validate a, MonadBase IO (M a), StreamId (Id a), EncodeEvent (Evt a))
+           => Cmd a
+           -> Action a (Decision a)
 _SubmitCmd cmd = do
   env    <- askEnv
   s      <- getState
