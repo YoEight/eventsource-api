@@ -33,6 +33,8 @@ module EventSource.Store
   , foldSubAsync
   , appendEvent
   , forEvents
+  , forEventsWithNumber
+  , foldEventsWithNumberM
   , foldEventsM
   , foldEvents
   , forSavedEvents
@@ -235,7 +237,17 @@ forEvents :: (MonadBase IO m, DecodeEvent a, Store store)
           -> StreamName
           -> (a -> m ())
           -> ExceptT ForEventFailure m ()
-forEvents store name k = do
+forEvents store name k = forEventsWithNumber store name (const k)
+
+--------------------------------------------------------------------------------
+-- | Iterates over all events of stream given a starting point and a batch size.
+--   It also passes the 'EventNumber' at each recursion step.
+forEventsWithNumber :: (MonadBase IO m, DecodeEvent a, Store store)
+                    => store
+                    -> StreamName
+                    -> (EventNumber -> a -> m ())
+                    -> ExceptT ForEventFailure m ()
+forEventsWithNumber store name k = do
   res <- streamIterator store name
   case res of
     ReadSuccess i -> loop i
@@ -246,7 +258,7 @@ forEvents store name k = do
       for_ opt $ \saved ->
         case decodeEvent $ savedEvent saved of
           Left e -> throwError $ ForEventDecodeFailure e
-          Right a -> lift (k a) >> loop i
+          Right a -> lift (k (eventNumber saved) a) >> loop i
 
 --------------------------------------------------------------------------------
 -- | Like 'forEvents' but expose signature similar to 'foldM'.
@@ -256,16 +268,29 @@ foldEventsM :: (MonadBase IO m, DecodeEvent a, Store store)
             -> (s -> a -> m s)
             -> s
             -> ExceptT ForEventFailure m s
-foldEventsM store stream k seed = mapExceptT trans action
+foldEventsM store stream k seed =
+  foldEventsWithNumberM store stream (const k) seed
+
+--------------------------------------------------------------------------------
+-- | Like 'forEvents' but expose signature similar to 'foldM' and also passes
+--   the 'EventNumber' at each recursion step.
+foldEventsWithNumberM :: (MonadBase IO m, DecodeEvent a, Store store)
+            => store
+            -> StreamName
+            -> (EventNumber -> s -> a -> m s)
+            -> s
+            -> ExceptT ForEventFailure m s
+foldEventsWithNumberM store stream k seed = mapExceptT trans action
   where
     trans m = evalStateT m seed
 
     action = do
-      forEvents store stream $ \a -> do
+      forEventsWithNumber store stream $ \num a -> do
         s <- get
-        s' <- lift $ k s a
+        s' <- lift $ k num s a
         put s'
       get
+
 
 --------------------------------------------------------------------------------
 -- | Like 'foldEventsM' but expose signature similar to 'foldl'.

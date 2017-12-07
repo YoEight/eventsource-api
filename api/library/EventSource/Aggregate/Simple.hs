@@ -17,6 +17,8 @@ module EventSource.Aggregate.Simple
   , ValidateIO(..)
   , Simple
   , newAgg
+  , loadAgg
+  , loadOrCreateAgg
   , submitCmd
   , submitEvt
   , snapshot
@@ -86,6 +88,25 @@ newAgg :: AggregateIO event state
        -> state
        -> IO (AggIO id command event state)
 newAgg store aId seed = Self.newAgg store aId (Simple seed)
+
+--------------------------------------------------------------------------------
+-- | Creates an aggregate and replays its entire stream to rebuild its
+--   internal state.
+loadAgg :: (AggregateIO event state, Self.StreamId id, DecodeEvent event)
+        => SomeStore
+        -> id
+        -> state
+        -> IO (Either ForEventFailure (AggIO id command event state))
+loadAgg store id seed = Self.loadAgg store id (Simple seed)
+
+--------------------------------------------------------------------------------
+-- | Like 'loadAgg' but call 'loadAgg' in case of 'ForEventFailure' error.
+loadOrCreateAgg :: (AggregateIO event state, Self.StreamId id, DecodeEvent event)
+                => SomeStore
+                -> id
+                -> state
+                -> IO (AggIO id command event state)
+loadOrCreateAgg store id seed = Self.loadOrCreateAgg store id (Simple seed)
 
 --------------------------------------------------------------------------------
 -- | Submits a command to the aggregate. If the command was valid, it returns

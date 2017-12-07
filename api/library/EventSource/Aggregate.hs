@@ -24,6 +24,8 @@ module EventSource.Aggregate
   , aggId
   , runAgg
   , newAgg
+  , loadAgg
+  , loadOrCreateAgg
   -- * Interactions
   , submitCmd
   , submitEvt
@@ -43,6 +45,7 @@ module EventSource.Aggregate
 --------------------------------------------------------------------------------
 import Control.Concurrent.Lifted
 import Control.Monad (ap)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans (MonadTrans(..))
 import Control.Monad.Trans.Control
 import Data.IORef.Lifted
@@ -219,6 +222,32 @@ newAgg store aId seed = do
     writeChan chan (Msg action k)
 
 --------------------------------------------------------------------------------
+-- | Creates an aggregate and replays its entire stream to rebuild its
+--   internal state.
+loadAgg :: (Aggregate a, StreamId (Id a), DecodeEvent (Evt a), MonadBaseControl IO (M a))
+        => SomeStore
+        -> Id a
+        -> a
+        -> M a (Either ForEventFailure (Agg a))
+loadAgg store aId seed = do
+  agg <- newAgg store aId seed
+  res <- execute agg (loadEventsAction aId)
+
+  pure (agg <$ res)
+
+--------------------------------------------------------------------------------
+-- | Like 'loadAgg' but call 'loadAgg' in case of 'ForEventFailure' error.
+loadOrCreateAgg :: (Aggregate a, StreamId (Id a), DecodeEvent (Evt a), MonadBaseControl IO (M a))
+                => SomeStore
+                -> Id a
+                -> a
+                -> M a (Agg a)
+loadOrCreateAgg store aId seed = do
+  agg <- newAgg store aId seed
+  _   <- execute agg (loadEventsAction aId)
+  pure agg
+
+--------------------------------------------------------------------------------
 -- | Submits a command to the aggregate. If the command was valid, it returns
 -- an event otherwise an error. In case of a valid command, the aggregate
 -- persist the resulting event to the eventstore. The aggregate will also
@@ -293,3 +322,20 @@ submitEvtAction event = do
 --------------------------------------------------------------------------------
 snapshotAction :: Monad (M a) => Action a a
 snapshotAction = fmap aggState getState
+
+--------------------------------------------------------------------------------
+loadEventsAction :: (Aggregate a, StreamId (Id a), DecodeEvent (Evt a), MonadBase IO (M a))
+                 => Id a
+                 -> Action a (Either ForEventFailure a)
+loadEventsAction aId = do
+  seed <- getState
+  env  <- askEnv
+
+  let go num s event =
+        do a <- apply (aggState s) event
+           pure s { aggState        = a
+                  , aggStateVersion = ExactVersion (num + 1)
+                  }
+
+  lift $ runExceptT $ fmap aggState
+       $ foldEventsWithNumberM (aggEnvStore env) (toStreamName aId) go seed
