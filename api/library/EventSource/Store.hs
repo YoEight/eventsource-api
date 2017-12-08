@@ -47,18 +47,25 @@ module EventSource.Store
   ) where
 
 --------------------------------------------------------------------------------
-import Prelude (Show(..))
+import Control.Monad (MonadPlus, mzero)
+import Control.Exception (Exception, SomeException, toException)
+import Data.Bifunctor (first)
+import Data.Foldable (for_)
+import Data.Int (Int32)
+import Data.Traversable (for)
 
 --------------------------------------------------------------------------------
-import Control.Concurrent.Async.Lifted hiding (wait)
-import Control.Monad.Base
-import Control.Monad.Catch
-import Control.Monad.Trans.Control
-import Control.Monad.Except
-import Data.IORef
-import Data.UUID
-import Data.UUID.V4
-import Protolude hiding (from, show, trans, async)
+import Control.Concurrent.Async.Lifted (Async, async, wait)
+import Control.Monad.Base (MonadBase, liftBase)
+import Control.Monad.Catch (MonadThrow, throwM)
+import Control.Monad.Except (ExceptT, runExceptT, mapExceptT, throwError)
+import Control.Monad.State (get, put, evalStateT)
+import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Control (MonadBaseControl, StM)
+import Data.IORef.Lifted (IORef, newIORef, atomicModifyIORef')
+import Data.Text (Text)
+import Data.UUID (UUID)
+import Data.UUID.V4 (nextRandom)
 
 --------------------------------------------------------------------------------
 import EventSource.Types
@@ -82,8 +89,8 @@ newtype SubscriptionId = SubscriptionId UUID deriving (Eq, Ord, Show)
 
 --------------------------------------------------------------------------------
 -- | Returns a fresh subscription id.
-freshSubscriptionId :: MonadIO m => m SubscriptionId
-freshSubscriptionId = liftIO $ fmap SubscriptionId nextRandom
+freshSubscriptionId :: MonadBase IO m => m SubscriptionId
+freshSubscriptionId = liftBase $ fmap SubscriptionId nextRandom
 
 --------------------------------------------------------------------------------
 -- | A subscription allows to be notified on every change occuring on a stream.
@@ -413,7 +420,7 @@ streamIterator store name = do
   w <- readBatch store name (startFrom 0)
   res <- liftBase $ wait w
   for res $ \slice -> do
-    ref <- liftBase $ newIORef $ IteratorOverAvailable slice
+    ref <- newIORef $ IteratorOverAvailable slice
     return $ StreamIterator $ iterateOver store ref name
 
 --------------------------------------------------------------------------------
@@ -436,7 +443,7 @@ iterateOver :: (Store store, MonadBase IO m)
 iterateOver store ref name = go
   where
     go = do
-      action <- liftBase $ atomicModifyIORef' ref $ \st ->
+      action <- atomicModifyIORef' ref $ \st ->
         case st of
           IteratorOverAvailable slice ->
             case sliceEvents slice of
@@ -460,9 +467,9 @@ iterateOver store ref name = go
           res <- liftBase $ wait w
           case res of
             ReadFailure _ -> do
-              liftBase $ atomicModifyIORef' ref $ \_ -> (IteratorOverClosed, ())
+              atomicModifyIORef' ref $ \_ -> (IteratorOverClosed, ())
               return Nothing
             ReadSuccess slice -> do
               let nxtSt = IteratorOverAvailable slice
-              liftBase $ atomicModifyIORef' ref $ \_ -> (nxtSt, ())
+              atomicModifyIORef' ref $ \_ -> (nxtSt, ())
               go

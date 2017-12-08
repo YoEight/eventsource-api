@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 --------------------------------------------------------------------------------
@@ -14,18 +15,26 @@
 module EventSource.Types where
 
 --------------------------------------------------------------------------------
-import Prelude (Show(..))
-import Data.Foldable
-import Data.String
+import Control.Exception (Exception)
+import Control.Monad (MonadPlus, mzero)
+import Data.Bifunctor (first)
+import Data.Foldable (foldlM)
+import Data.Int (Int32)
+import Data.String (IsString(..))
+import Data.String.Conversions (convertString)
 
 --------------------------------------------------------------------------------
-import Protolude hiding (show)
-import Data.Aeson
-import Data.Aeson.Types
-import Data.UUID hiding (fromString)
-import Data.UUID.V4
-import qualified Data.HashMap.Strict as H
-import qualified Data.Map.Strict as M
+import           Control.Monad.Base (MonadBase, liftBase)
+import           Control.Monad.State.Strict (State, modify, put)
+import           Data.Aeson (ToJSON(..), FromJSON(..), Value, (.=), (.:))
+import qualified Data.Aeson as Aeson
+import           Data.Aeson.Types (Parser, parseEither)
+import           Data.ByteString (ByteString)
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Map.Strict as Map
+import           Data.Text (Text)
+import           Data.UUID (UUID, toText, fromText)
+import           Data.UUID.V4 (nextRandom)
 
 --------------------------------------------------------------------------------
 -- | Opaque data type used to store raw data.
@@ -68,7 +77,7 @@ instance Monad JsonParsing where
 -- | Returns 'Data' content as a 'ByteString'.
 dataAsBytes :: Data -> ByteString
 dataAsBytes (Data bs) = bs
-dataAsBytes (DataAsJson v) = toS $ encode v
+dataAsBytes (DataAsJson v) = convertString $ Aeson.encode v
 
 --------------------------------------------------------------------------------
 -- | Creates a 'Data' object from a raw 'ByteString'.
@@ -83,15 +92,15 @@ dataFromJson = DataAsJson . toJSON
 --------------------------------------------------------------------------------
 -- | Returns 'Data' content as any value that implements 'FromJSON' type-class.
 dataAsJson :: FromJSON a => Data -> Either Text a
-dataAsJson (Data bs) = first toS $ eitherDecodeStrict bs
-dataAsJson (DataAsJson v) = first toS $ parseEither parseJSON v
+dataAsJson (Data bs) = first convertString $ Aeson.eitherDecodeStrict bs
+dataAsJson (DataAsJson v) = first convertString $ parseEither parseJSON v
 
 --------------------------------------------------------------------------------
 -- | Uses a 'JsonParsing' comuputation to extract a value.
 dataAsParsing :: Data -> JsonParsing a -> Either Text a
 dataAsParsing dat (JsonParsing k) = do
   value <- dataAsJson dat
-  first toS $ parseEither k value
+  first convertString $ parseEither k value
 
 --------------------------------------------------------------------------------
 -- | Like 'dataAsParsing' but doesn't require you to use 'JsonParsing'.
@@ -101,7 +110,7 @@ dataAsParse dat k = dataAsParsing dat $ JsonParsing k
 --------------------------------------------------------------------------------
 -- | Used to store a set a properties. One example is to be used as 'Event'
 --   metadata.
-newtype Properties = Properties (Map Text Text)
+newtype Properties = Properties (Map.Map Text Text)
 
 --------------------------------------------------------------------------------
 instance Monoid Properties where
@@ -114,21 +123,21 @@ instance Show Properties where
 
 --------------------------------------------------------------------------------
 instance ToJSON Properties where
-  toJSON = object . fmap go . properties
+  toJSON = Aeson.object . fmap go . properties
     where
       go (k, v) = k .= v
 
 --------------------------------------------------------------------------------
 instance FromJSON Properties where
-  parseJSON = withObject "Properties" $ \o ->
+  parseJSON = Aeson.withObject "Properties" $ \o ->
     let go p k = fmap (\v -> setProperty k v p) (o .: k) in
-    foldlM go mempty (H.keys o)
+    foldlM go mempty (HashMap.keys o)
 
 --------------------------------------------------------------------------------
 -- | Retrieves a value associated with the given key.
 property :: MonadPlus m => Text -> Properties -> m Text
 property k (Properties m) =
-  case M.lookup k m of
+  case Map.lookup k m of
     Nothing -> mzero
     Just v -> return v
 
@@ -140,12 +149,12 @@ singleton k v = setProperty k v mempty
 --------------------------------------------------------------------------------
 -- | Adds a pair of key-value into given 'Properties'.
 setProperty :: Text -> Text -> Properties -> Properties
-setProperty key value (Properties m) = Properties $ M.insert key value m
+setProperty key value (Properties m) = Properties $ Map.insert key value m
 
 --------------------------------------------------------------------------------
 -- | Returns all associated key-value pairs as a list.
 properties :: Properties -> [(Text, Text)]
-properties (Properties m) = M.toList m
+properties (Properties m) = Map.toList m
 
 --------------------------------------------------------------------------------
 -- | Used to identify an event.
@@ -157,7 +166,7 @@ instance ToJSON EventId where
 
 --------------------------------------------------------------------------------
 instance FromJSON EventId where
-  parseJSON = withText "EventId" $ \t ->
+  parseJSON = Aeson.withText "EventId" $ \t ->
     case fromText t of
       Just u  -> return $ EventId u
       Nothing -> mzero
@@ -168,8 +177,8 @@ instance Show EventId where
 
 --------------------------------------------------------------------------------
 -- | Generates a fresh 'EventId'.
-freshEventId :: MonadIO m => m EventId
-freshEventId = fmap EventId $ liftIO nextRandom
+freshEventId :: MonadBase IO m => m EventId
+freshEventId = fmap EventId $ liftBase nextRandom
 
 --------------------------------------------------------------------------------
 -- | Represents a stream name.

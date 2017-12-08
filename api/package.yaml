@@ -11,11 +11,8 @@ extra-source-files:
 ghc-options: -Wall
 github: YoEight/eventsource-api
 library:
-  default-extensions:
-    - NoImplicitPrelude
   dependencies:
     - base >=4.9 && <5
-    - protolude >= 0.1.10 && <0.3
     - uuid
     - aeson
     - mtl
@@ -26,6 +23,9 @@ library:
     - monad-control
     - transformers-base
     - exceptions
+    - text
+    - bytestring
+    - string-conversions
   source-dirs: library
 license: BSD3
 license-file: LICENSE.md

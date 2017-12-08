@@ -25,7 +25,7 @@ module EventSource.Aggregate.Simple
   ) where
 
 --------------------------------------------------------------------------------
-import Protolude
+import Control.Exception (SomeException)
 
 --------------------------------------------------------------------------------
 import qualified EventSource.Aggregate as Self
@@ -97,7 +97,7 @@ loadAgg :: (AggregateIO event state, Self.StreamId id, DecodeEvent event)
         -> id
         -> state
         -> IO (Either ForEventFailure (AggIO id command event state))
-loadAgg store id seed = Self.loadAgg store id (Simple seed)
+loadAgg store aId seed = Self.loadAgg store aId (Simple seed)
 
 --------------------------------------------------------------------------------
 -- | Like 'loadAgg' but call 'loadAgg' in case of 'ForEventFailure' error.
@@ -106,7 +106,7 @@ loadOrCreateAgg :: (AggregateIO event state, Self.StreamId id, DecodeEvent event
                 -> id
                 -> state
                 -> IO (AggIO id command event state)
-loadOrCreateAgg store id seed = Self.loadOrCreateAgg store id (Simple seed)
+loadOrCreateAgg store aId seed = Self.loadOrCreateAgg store aId (Simple seed)
 
 --------------------------------------------------------------------------------
 -- | Submits a command to the aggregate. If the command was valid, it returns

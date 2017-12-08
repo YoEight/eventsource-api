@@ -43,16 +43,17 @@ module EventSource.Aggregate
   ) where
 
 --------------------------------------------------------------------------------
-import Control.Concurrent.Lifted
-import Control.Monad (ap)
-import Control.Monad.Except (runExceptT)
-import Control.Monad.Trans (MonadTrans(..))
-import Control.Monad.Trans.Control
-import Data.IORef.Lifted
-import Protolude hiding (putMVar, takeMVar, newEmptyMVar, newChan, writeChan, readChan)
+import Control.Monad (ap,forever)
+import Data.Foldable (for_)
 
 --------------------------------------------------------------------------------
-import Control.Monad.Base
+import           Control.Concurrent.Async.Lifted (wait)
+import qualified Control.Concurrent.Lifted as Concurrent
+import           Control.Monad.Base (MonadBase, liftBase)
+import           Control.Monad.Except (runExceptT)
+import           Control.Monad.Trans (MonadTrans(..))
+import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Data.IORef.Lifted (newIORef, readIORef, writeIORef)
 
 --------------------------------------------------------------------------------
 import EventSource
@@ -210,16 +211,16 @@ newAgg :: (Aggregate a, MonadBaseControl IO (M a))
 newAgg store aId seed = do
   let env = AggEnv store aId
   ref  <- newIORef (AggState AnyVersion seed)
-  chan <- newChan
-  _    <- fork $ forever $ do
-    Msg action k <- readChan chan
+  chan <- Concurrent.newChan
+  _    <- Concurrent.fork $ forever $ do
+    Msg action k <- Concurrent.readChan chan
     s            <- readIORef ref
     runAction action env s $ \s' r -> do
       writeIORef ref s'
       k r
 
   pure $ Agg env $ \action k ->
-    writeChan chan (Msg action k)
+    Concurrent.writeChan chan (Msg action k)
 
 --------------------------------------------------------------------------------
 -- | Creates an aggregate and replays its entire stream to rebuild its
@@ -272,9 +273,9 @@ snapshot agg = execute agg snapshotAction
 -- | Executes an action.
 execute :: MonadBase IO (M a) => Agg a -> Action a r -> M a r
 execute agg action = do
-  var <- newEmptyMVar
-  runAgg agg action (putMVar var)
-  takeMVar var
+  var <- Concurrent.newEmptyMVar
+  runAgg agg action (Concurrent.putMVar var)
+  Concurrent.takeMVar var
 
 --------------------------------------------------------------------------------
 -- | Persist an event to the eventstore.
