@@ -58,7 +58,7 @@ class AggregateIO event state | event -> state where
 --   validation can receive command and decide if it was valid or not. When the
 --   validation is successful, The aggregate emits an event that will be
 --   persisted and pass to 'apply' function.
-class AggregateIO event state => ValidateIO command event state | command -> state, event -> state where
+class AggregateIO event state => ValidateIO command event state | command -> state, command -> event where
 
   -- | Validates a command. If the command validation succeeds, it will emits
   --   an event. Otherwise, it will returns an error.

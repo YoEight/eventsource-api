@@ -1,7 +1,8 @@
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 --------------------------------------------------------------------------------
 -- |
 -- Module : Test.EventSource.Store.Specification
@@ -16,19 +17,24 @@
 module Test.EventSource.Store.Specification (specification) where
 
 --------------------------------------------------------------------------------
+import Control.Exception (Exception, toException, fromException)
 import Control.Monad (unless)
-import Data.Foldable (for_)
+import Data.Foldable (for_, traverse_)
+import Data.Semigroup ((<>))
 
 --------------------------------------------------------------------------------
-import Control.Concurrent.Async (wait)
-import Control.Monad.Except (runExceptT, mapExceptT)
-import Control.Monad.Base (MonadBase, liftBase)
-import Control.Monad.State (evalStateT, get, modify)
-import Data.Aeson.Types (object, withObject, (.=), (.:))
-import Data.UUID (toText)
-import Data.UUID.V4 (nextRandom)
-import EventSource
-import Test.Tasty.Hspec
+import           Control.Concurrent.Async (wait)
+import           Control.Monad.Except (runExceptT, mapExceptT)
+import           Control.Monad.Base (MonadBase, liftBase)
+import           Control.Monad.State (evalStateT, get, modify)
+import           Data.Aeson.Types (object, withObject, (.=), (.:))
+import           Data.Text (Text)
+import           Data.UUID (toText)
+import           Data.UUID.V4 (nextRandom)
+import           EventSource
+import           EventSource.Aggregate (StreamId(..))
+import qualified EventSource.Aggregate.Simple as Simple
+import           Test.Tasty.Hspec
 
 --------------------------------------------------------------------------------
 newtype TestEvent = TestEvent Int deriving (Eq, Show)
@@ -47,6 +53,38 @@ instance DecodeEvent TestEvent where
 
     dataAsParse eventPayload $ withObject "" $ \o ->
       fmap TestEvent (o .: "value")
+
+--------------------------------------------------------------------------------
+newtype Test = Test Int deriving (Eq, Show)
+
+--------------------------------------------------------------------------------
+data TestCmd
+  = TestIncr Int
+  | TestCmdError
+
+--------------------------------------------------------------------------------
+data TestError = TestError deriving (Eq, Show)
+
+--------------------------------------------------------------------------------
+instance Exception TestError
+
+--------------------------------------------------------------------------------
+newtype TestId = TestId Text
+
+--------------------------------------------------------------------------------
+instance StreamId TestId where
+  toStreamName (TestId i) = StreamName $ "test:stream:" <> i
+
+--------------------------------------------------------------------------------
+instance Simple.AggregateIO TestEvent Test where
+  applyIO (Test x) (TestEvent i) = pure (Test (x+i))
+
+--------------------------------------------------------------------------------
+instance Simple.ValidateIO TestCmd TestEvent Test where
+  validateIO _ cmd =
+    case cmd of
+      TestIncr i   -> pure (Right $ TestEvent i)
+      TestCmdError -> pure (Left $ toException TestError)
 
 --------------------------------------------------------------------------------
 freshStreamName :: MonadBase IO m => m StreamName
@@ -181,3 +219,54 @@ specification store = do
 
     got <- iteratorReadAllEvents i
     got `shouldBe` events
+
+  specify "API/Aggregate - submit event" $ do
+    agg <- Simple.newAgg (toStore store) (TestId "submit:event") (Test 0)
+    let events = fmap TestEvent [0..10]
+
+    traverse_ (Simple.submitEvt agg) events
+    got <- Simple.snapshot agg
+
+    got `shouldBe` Test 10
+
+  specify "API/Aggregate - submit commands" $ do
+    agg <- Simple.newAgg (toStore store) (TestId "submit:command") (Test 0)
+
+    res1 <- Simple.submitCmd agg (TestIncr 1)
+    let go1 (Right evt) = evt == TestEvent 1
+        go1 Left{}      = False
+    res1 `shouldSatisfy` go1
+
+    s1 <- Simple.snapshot agg
+    s1 `shouldBe` Test 1
+
+    res2 <- Simple.submitCmd agg TestCmdError
+    let go2 Right{}  = False
+        go2 (Left e) = fromException e == Just TestError
+    res2 `shouldSatisfy` go2
+
+  specify "API/Aggregate - loading" $ do
+    agg1 <- Simple.newAgg (toStore store) (TestId "submit:load") (Test 0)
+
+    let commands = replicate 10 (TestIncr 1)
+
+    traverse_ (Simple.submitCmd agg1) commands
+
+    res1 <- Simple.snapshot agg1
+    res1 `shouldBe` Test 10
+
+    outcome <- Simple.loadAgg (toStore store) (TestId "submit:load") (Test 0)
+    case outcome of
+      Left{}     -> error "We should be able to load an aggregate."
+      Right agg2 ->
+        do res2 <- Simple.snapshot agg2
+           res2 `shouldBe` res1
+
+           res3 <- Simple.submitCmd agg2 (TestIncr 1)
+           let go3 Left{} = False
+               go3 Right{} = True
+           res3 `shouldSatisfy` go3
+
+           res4 <- Simple.snapshot agg2
+           res4 `shouldBe` Test 11
+
