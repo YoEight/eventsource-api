@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -15,15 +16,18 @@
 module Test.EventSource.Store.Specification (specification) where
 
 --------------------------------------------------------------------------------
-import Prelude (Show(..))
+import Control.Monad (unless)
+import Data.Foldable (for_)
 
 --------------------------------------------------------------------------------
-import Control.Monad.Except
-import Data.Aeson.Types
-import Data.UUID
-import Data.UUID.V4
+import Control.Concurrent.Async (wait)
+import Control.Monad.Except (runExceptT, mapExceptT)
+import Control.Monad.Base (MonadBase, liftBase)
+import Control.Monad.State (evalStateT, get, modify)
+import Data.Aeson.Types (object, withObject, (.=), (.:))
+import Data.UUID (toText)
+import Data.UUID.V4 (nextRandom)
 import EventSource
-import Protolude hiding (show)
 import Test.Tasty.Hspec
 
 --------------------------------------------------------------------------------
@@ -45,8 +49,8 @@ instance DecodeEvent TestEvent where
       fmap TestEvent (o .: "value")
 
 --------------------------------------------------------------------------------
-freshStreamName :: MonadIO m => m StreamName
-freshStreamName = liftIO $ fmap (StreamName . toText) nextRandom
+freshStreamName :: MonadBase IO m => m StreamName
+freshStreamName = liftBase $ fmap (StreamName . toText) nextRandom
 
 --------------------------------------------------------------------------------
 incr :: Int -> Int
@@ -147,7 +151,7 @@ specification store = do
     let values = [0..9]
         events = fmap TestEvent values
         seed   = Right (0, EventNumber 0)
-        
+
         testFold (Left e) _           = Left e
         testFold (Right (a, n)) saved =
           let n' = eventNumber saved
@@ -155,7 +159,7 @@ specification store = do
           case ee of
             Left t               -> Left t
             Right (TestEvent a') -> Right (a + a', max n n')
-        
+
     name <- freshStreamName
     _ <- wait =<< appendEvents store name AnyVersion events
 
