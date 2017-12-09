@@ -11,16 +11,14 @@ extra-source-files:
 ghc-options: -Wall
 github: YoEight/eventsource-api
 library:
-  default-extensions:
-    - NoImplicitPrelude
   dependencies:
   - base >=4.9 && <5
   - eventsource-api >=1.1
-  - protolude >=0.1.10 && <0.3
   - containers
   - mtl
   - stm
   - transformers-base
+  - async
   source-dirs: library
 license: BSD3
 license-file: LICENSE.md

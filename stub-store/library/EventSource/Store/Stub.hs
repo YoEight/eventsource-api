@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 --------------------------------------------------------------------------------
@@ -23,12 +24,20 @@ module EventSource.Store.Stub
   ) where
 
 --------------------------------------------------------------------------------
-import           Control.Concurrent.STM
-import           Control.Monad.Base
-import qualified Data.Map.Strict as M
+import Control.Monad (unless)
+import           Control.Concurrent.STM (STM)
+import qualified Control.Concurrent.STM as STM
+import Data.Foldable (toList, for_, foldl')
+import Data.Monoid (Last(..))
+
+--------------------------------------------------------------------------------
+import           Control.Concurrent.Async (async)
+import           Control.Monad.Base (MonadBase, liftBase)
+import           Control.Monad.State.Strict (execState)
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import           Data.Sequence (Seq, (|>))
 import qualified Data.Sequence as S
-import           Protolude
 
 --------------------------------------------------------------------------------
 import EventSource.Store
@@ -42,31 +51,31 @@ data Stream =
          }
 
 --------------------------------------------------------------------------------
-type Sub = TChan SavedEvent
+type Sub = STM.TChan SavedEvent
 type Subs = Map SubscriptionId Sub
 
 --------------------------------------------------------------------------------
 data StubStore =
-  StubStore { _streams :: TVar (Map StreamName Stream)
-            , _subs :: TVar (Map StreamName Subs)
+  StubStore { _streams :: STM.TVar (Map StreamName Stream)
+            , _subs :: STM.TVar (Map StreamName Subs)
             }
 
 --------------------------------------------------------------------------------
 -- | Creates a new stub event store.
 newStub :: IO StubStore
-newStub = StubStore <$> newTVarIO mempty <*> newTVarIO mempty
+newStub = StubStore <$> STM.newTVarIO mempty <*> STM.newTVarIO mempty
 
 --------------------------------------------------------------------------------
 -- | Returns current 'StubStore' streams state.
 streams :: StubStore -> IO (Map StreamName Stream)
-streams StubStore{..} = readTVarIO _streams
+streams StubStore{..} = STM.readTVarIO _streams
 
 --------------------------------------------------------------------------------
 -- | Returns the last event of stream.
 lastStreamEvent :: StubStore -> StreamName -> IO (Maybe SavedEvent)
 lastStreamEvent stub name = do
   streamMap <- streams stub
-  return (go =<< M.lookup name streamMap)
+  return (go =<< Map.lookup name streamMap)
     where
       go stream =
         case S.viewr $ streamEvents stream of
@@ -77,10 +86,10 @@ lastStreamEvent stub name = do
 -- | Returns all subscriptions a stream has.
 subscriptionIds :: StubStore -> StreamName -> IO [SubscriptionId]
 subscriptionIds StubStore{..} name = do
-  subMap <- readTVarIO _subs
-  case M.lookup name subMap of
+  subMap <- STM.readTVarIO _subs
+  case Map.lookup name subMap of
     Nothing -> return []
-    Just subs -> return $ M.keys subs
+    Just subs -> return $ Map.keys subs
 
 --------------------------------------------------------------------------------
 appendStream :: [Event] -> Stream -> Stream
@@ -100,14 +109,14 @@ newStream xs = appendStream xs (Stream 0 mempty)
 --------------------------------------------------------------------------------
 notifySubs :: StubStore -> StreamName -> [SavedEvent] -> STM ()
 notifySubs StubStore{..} name events = do
-  subMap <- readTVar _subs
-  for_ (M.lookup name subMap) $ \subs ->
+  subMap <- STM.readTVar _subs
+  for_ (Map.lookup name subMap) $ \subs ->
     for_ subs $ \sub ->
       for_ events $ \e ->
-        writeTChan sub e
+        STM.writeTChan sub e
 
 --------------------------------------------------------------------------------
-buildEvent :: (EncodeEvent a, MonadIO m) => a -> m Event
+buildEvent :: (EncodeEvent a, MonadBase IO m) => a -> m Event
 buildEvent a = do
   eid <- freshEventId
   let start = Event { eventType = ""
@@ -122,32 +131,32 @@ buildEvent a = do
 instance Store StubStore where
   appendEvents self@StubStore{..} name ver xs = do
     events <- traverse buildEvent xs
-    liftIO $ async $ atomically $ do
-      streamMap <- readTVar _streams
+    liftBase $ async $ STM.atomically $ do
+      streamMap <- STM.readTVar _streams
 
-      case M.lookup name streamMap of
+      case Map.lookup name streamMap of
         Nothing -> do
           case ver of
             StreamExists ->
-              throwSTM $ ExpectedVersionException ver NoStream
+              STM.throwSTM $ ExpectedVersionException ver NoStream
             ExactVersion v ->
-              unless (v == 0) $ throwSTM
+              unless (v == 0) $ STM.throwSTM
                               $ ExpectedVersionException ver NoStream
             _ -> return ()
 
           let _F Nothing  = Just $ newStream events
               _F (Just s) = Just $ appendStream events s
 
-              newStreamMap = M.alter _F name streamMap
+              newStreamMap = Map.alter _F name streamMap
 
-          writeTVar _streams newStreamMap
+          STM.writeTVar _streams newStreamMap
 
           -- This part is already performed in 'appendStream' but difficult
           -- to take its logic apart from building 'SavedEvent's.
           let saved = (\(num, evt) -> SavedEvent num evt Nothing) <$> zip [0..] events
           notifySubs self name saved
-          let Just last = getLast $ foldMap (Last . Just) saved
-              nextNum = eventNumber last + 1
+          let Just lastOne = getLast $ foldMap (Last . Just) saved
+              nextNum = eventNumber lastOne + 1
           return nextNum
 
 
@@ -155,31 +164,31 @@ instance Store StubStore where
           let currentNumber = streamNextNumber stream
           case ver of
             NoStream ->
-              throwSTM $ ExpectedVersionException ver StreamExists
+              STM.throwSTM $ ExpectedVersionException ver StreamExists
             ExactVersion v ->
               unless (v == streamNextNumber stream - 1)
-                $ throwSTM
+                $ STM.throwSTM
                 $ ExpectedVersionException ver (ExactVersion currentNumber)
 
             _ -> return ()
 
           let nextStream = appendStream events stream
-              newStreamMap = M.adjust (const nextStream) name streamMap
+              newStreamMap = Map.adjust (const nextStream) name streamMap
 
-          writeTVar _streams newStreamMap
+          STM.writeTVar _streams newStreamMap
 
           -- This part is already performed in 'appendStream' but difficult
           -- to take its logic apart from building 'SavedEvent's.
           let saved = (\(num, evt) -> SavedEvent num evt Nothing) <$> zip [currentNumber..] events
           notifySubs self name saved
-          let Just last = getLast $ foldMap (Last . Just) saved
-              nextNum = eventNumber last + 1
+          let Just lastOne = getLast $ foldMap (Last . Just) saved
+              nextNum = eventNumber lastOne + 1
           return nextNum
 
 
-  readBatch StubStore{..} name (Batch start _) = liftIO $ async $ atomically $ do
-    streamMap <- readTVar _streams
-    case M.lookup name streamMap of
+  readBatch StubStore{..} name (Batch start _) = liftBase $ async $ STM.atomically $ do
+    streamMap <- STM.readTVar _streams
+    case Map.lookup name streamMap of
       Nothing -> return $ ReadFailure $ StreamNotFound name
       Just stream -> do
         let events = S.filter ((>= start) . eventNumber) $ streamEvents stream
@@ -192,17 +201,17 @@ instance Store StubStore where
 
   subscribe StubStore{..} name = do
     sid <- freshSubscriptionId
-    liftIO $ atomically $ do
-      chan <- newTChan
-      let sub = Subscription sid $ liftBase $ atomically $ do
-            saved <- readTChan chan
+    liftBase $ STM.atomically $ do
+      chan <- STM.newTChan
+      let sub = Subscription sid $ liftBase $ STM.atomically $ do
+            saved <- STM.readTChan chan
             return $ Right saved
 
-      subMap <- readTVar _subs
-      let _F Nothing  = Just $ M.singleton sid  chan
-          _F (Just m) = Just $ M.insert sid chan m
+      subMap <- STM.readTVar _subs
+      let _F Nothing  = Just $ Map.singleton sid  chan
+          _F (Just m) = Just $ Map.insert sid chan m
 
-          nextSubMap = M.alter _F name subMap
+          nextSubMap = Map.alter _F name subMap
 
-      writeTVar _subs nextSubMap
+      STM.writeTVar _subs nextSubMap
       return sub
