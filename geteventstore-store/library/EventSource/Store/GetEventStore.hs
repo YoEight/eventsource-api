@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 --------------------------------------------------------------------------------
@@ -19,9 +20,13 @@ module EventSource.Store.GetEventStore
   ) where
 
 --------------------------------------------------------------------------------
-import           Protolude
-import           Control.Monad.Base
-import           Data.Aeson
+import Control.Exception (try)
+
+--------------------------------------------------------------------------------
+import           Control.Monad.Base (MonadBase, liftBase)
+import           Control.Monad.State.Strict (execState)
+import           Data.Aeson (encode, decodeStrict)
+import           Data.String.Conversions (convertString)
 import qualified Database.EventStore as GES
 import           EventSource
 
@@ -38,7 +43,7 @@ toGesExpVer (ExactVersion n) =
   GES.exactEventVersion i
 
 --------------------------------------------------------------------------------
-buildEvent :: (EncodeEvent a, MonadIO m) => a -> m Event
+buildEvent :: (EncodeEvent a, MonadBase IO m) => a -> m Event
 buildEvent a = do
   eid <- freshEventId
   let start = Event { eventType = ""
@@ -68,7 +73,7 @@ toGesEvent e = GES.createEvent (GES.UserDefined typ) (Just eid) eventData
             DataAsJson v -> GES.withJson v
         Just p ->
           case eventPayload e of
-            Data bs -> GES.withBinaryAndMetadata bs (toS $ encode p)
+            Data bs -> GES.withBinaryAndMetadata bs (convertString $ encode p)
             DataAsJson v -> GES.withJsonAndMetadata v p
 
 --------------------------------------------------------------------------------
@@ -124,17 +129,17 @@ toGESStreamName (StreamName name) = GES.StreamName name
 
 --------------------------------------------------------------------------------
 instance Store GetEventStore where
-  appendEvents (GetEventStore conn) name ver xs = liftIO $ do
+  appendEvents (GetEventStore conn) name ver xs = liftBase $ do
     events <- traverse makeEvent xs
     w <- GES.sendEvents conn (toGESStreamName name) (toGesExpVer ver) events
     return $ fmap (EventNumber . GES.writeNextExpectedVersion) w
 
-  readBatch (GetEventStore conn) name b = liftIO $ do
+  readBatch (GetEventStore conn) name b = liftBase $ do
     let EventNumber n = batchFrom b
     w <- GES.readStreamEventsForward conn (toGESStreamName name) n (batchSize b) True
     return $ fmap (fmap fromGesSlice . fromGesReadResult name) w
 
-  subscribe (GetEventStore conn) name = liftIO $ do
+  subscribe (GetEventStore conn) name = liftBase $ do
     sub <- GES.subscribe conn (toGESStreamName name) True
     sid <- freshSubscriptionId
 
