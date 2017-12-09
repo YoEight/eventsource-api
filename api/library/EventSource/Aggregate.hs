@@ -44,7 +44,7 @@ module EventSource.Aggregate
 
 --------------------------------------------------------------------------------
 import Control.Monad (ap,forever)
-import Data.Foldable (for_)
+import Data.Foldable (for_, traverse_)
 
 --------------------------------------------------------------------------------
 import           Control.Concurrent.Async.Lifted (wait)
@@ -338,5 +338,8 @@ loadEventsAction aId = do
                   , aggStateVersion = ExactVersion (num + 1)
                   }
 
-  lift $ runExceptT $ fmap aggState
+  res <- lift $ runExceptT
        $ foldEventsWithNumberM (aggEnvStore env) (toStreamName aId) go seed
+
+  traverse_ putState res
+  pure (fmap aggState res)
