@@ -335,7 +335,7 @@ loadEventsAction aId = do
   let go num s event =
         do a <- apply (aggState s) event
            pure s { aggState        = a
-                  , aggStateVersion = ExactVersion (num + 1)
+                  , aggStateVersion = ExactVersion num
                   }
 
   res <- lift $ runExceptT

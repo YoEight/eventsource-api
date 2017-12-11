@@ -222,7 +222,7 @@ specification store = do
 
   specify "API/Aggregate - submit event" $ do
     agg <- Simple.newAgg (toStore store) (TestId "submit:event") (Test 0)
-    let events = fmap TestEvent [0..10]
+    let events = replicate 10 (TestEvent 1)
 
     traverse_ (Simple.submitEvt agg) events
     got <- Simple.snapshot agg
@@ -256,6 +256,7 @@ specification store = do
     res1 `shouldBe` Test 10
 
     outcome <- Simple.loadAgg (toStore store) (TestId "submit:load") (Test 0)
+
     case outcome of
       Left{}     -> error "We should be able to load an aggregate."
       Right agg2 ->
