@@ -24,11 +24,9 @@ module EventSource.Store.Stub
   ) where
 
 --------------------------------------------------------------------------------
-import Control.Monad (unless)
 import           Control.Concurrent.STM (STM)
 import qualified Control.Concurrent.STM as STM
 import Data.Foldable (toList, for_, foldl')
-import Data.Monoid (Last(..))
 
 --------------------------------------------------------------------------------
 import           Control.Concurrent.Async (async)
@@ -46,7 +44,7 @@ import EventSource.Types hiding (singleton)
 --------------------------------------------------------------------------------
 -- | Holds stream state data.
 data Stream =
-  Stream { streamNextNumber :: EventNumber
+  Stream { streamNumber :: EventNumber
          , streamEvents :: Seq SavedEvent
          }
 
@@ -59,6 +57,55 @@ data StubStore =
   StubStore { _streams :: STM.TVar (Map StreamName Stream)
             , _subs :: STM.TVar (Map StreamName Subs)
             }
+
+--------------------------------------------------------------------------------
+data Version
+  = NoStreamYet
+  | Version EventNumber
+
+--------------------------------------------------------------------------------
+getCurrentVersion :: StreamName -> Map StreamName Stream -> Version
+getCurrentVersion name m =
+  case Map.lookup name m of
+    Nothing -> NoStreamYet
+    Just s  -> Version $ streamNumber s
+
+--------------------------------------------------------------------------------
+data Registered =
+  Registered { _regSavedEvents :: !(Seq SavedEvent)
+             , _regNumber      :: !EventNumber
+             , _regNewMap      :: !(Map StreamName Stream)
+             }
+
+--------------------------------------------------------------------------------
+registerEvents :: StreamName
+               -> [Event]
+               -> Map StreamName Stream
+               -> Registered
+registerEvents name xs m =
+  case Map.lookup name m of
+    Nothing     -> appendStream (Stream (-1) mempty)
+    Just stream -> appendStream stream
+  where
+    appendStream stream =
+      let
+          cur       = streamNumber stream
+          nextNum   = cur + fromIntegral (length xs)
+          saved     = appEvents cur (streamEvents stream)
+          newStream = Stream nextNum saved
+          regd      = Registered saved nextNum (Map.insert name newStream m)
+
+       in regd
+
+    appEvents ver xss =
+      let go (acc, cur) evt =
+            let next   = cur + 1
+                saved  = SavedEvent next evt Nothing
+                newAcc = acc |> saved
+
+             in (newAcc, next)
+
+       in fst $ foldl' go (xss,ver) xs
 
 --------------------------------------------------------------------------------
 -- | Creates a new stub event store.
@@ -92,22 +139,7 @@ subscriptionIds StubStore{..} name = do
     Just subs -> return $ Map.keys subs
 
 --------------------------------------------------------------------------------
-appendStream :: [Event] -> Stream -> Stream
-appendStream = flip $ foldl' go
-  where
-    go s e =
-      let num = streamNextNumber s
-          evts = streamEvents s in
-      s { streamNextNumber = num + 1
-        , streamEvents = evts |> SavedEvent num e Nothing
-        }
-
---------------------------------------------------------------------------------
-newStream :: [Event] -> Stream
-newStream xs = appendStream xs (Stream 0 mempty)
-
---------------------------------------------------------------------------------
-notifySubs :: StubStore -> StreamName -> [SavedEvent] -> STM ()
+notifySubs :: Foldable f => StubStore -> StreamName -> f SavedEvent -> STM ()
 notifySubs StubStore{..} name events = do
   subMap <- STM.readTVar _subs
   for_ (Map.lookup name subMap) $ \subs ->
@@ -134,57 +166,28 @@ instance Store StubStore where
     liftBase $ async $ STM.atomically $ do
       streamMap <- STM.readTVar _streams
 
-      case Map.lookup name streamMap of
-        Nothing -> do
+      let persistEvents =
+            do let regd = registerEvents name events streamMap
+
+               notifySubs self name $ _regSavedEvents regd
+               (_regNumber regd) <$ STM.writeTVar _streams (_regNewMap regd)
+
+      case getCurrentVersion name streamMap of
+        NoStreamYet ->
           case ver of
-            StreamExists ->
-              STM.throwSTM $ ExpectedVersionException ver NoStream
-            ExactVersion v ->
-              unless (v == 0) $ STM.throwSTM
-                              $ ExpectedVersionException ver NoStream
-            _ -> return ()
-
-          let _F Nothing  = Just $ newStream events
-              _F (Just s) = Just $ appendStream events s
-
-              newStreamMap = Map.alter _F name streamMap
-
-          STM.writeTVar _streams newStreamMap
-
-          -- This part is already performed in 'appendStream' but difficult
-          -- to take its logic apart from building 'SavedEvent's.
-          let saved = (\(num, evt) -> SavedEvent num evt Nothing) <$> zip [0..] events
-          notifySubs self name saved
-          let Just lastOne = getLast $ foldMap (Last . Just) saved
-              nextNum = eventNumber lastOne + 1
-          return nextNum
-
-
-        Just stream -> do
-          let currentNumber = streamNextNumber stream
+            NoStream   -> persistEvents
+            AnyVersion -> persistEvents
+            _          -> STM.throwSTM $ ExpectedVersionException ver NoStream
+        Version num ->
           case ver of
-            NoStream ->
-              STM.throwSTM $ ExpectedVersionException ver StreamExists
-            ExactVersion v ->
-              unless (v == streamNextNumber stream - 1)
-                $ STM.throwSTM
-                $ ExpectedVersionException ver (ExactVersion currentNumber)
-
-            _ -> return ()
-
-          let nextStream = appendStream events stream
-              newStreamMap = Map.adjust (const nextStream) name streamMap
-
-          STM.writeTVar _streams newStreamMap
-
-          -- This part is already performed in 'appendStream' but difficult
-          -- to take its logic apart from building 'SavedEvent's.
-          let saved = (\(num, evt) -> SavedEvent num evt Nothing) <$> zip [currentNumber..] events
-          notifySubs self name saved
-          let Just lastOne = getLast $ foldMap (Last . Just) saved
-              nextNum = eventNumber lastOne + 1
-          return nextNum
-
+            AnyVersion   -> persistEvents
+            StreamExists -> persistEvents
+            NoStream     -> STM.throwSTM $ ExpectedVersionException ver
+                                         $ ExactVersion num
+            ExactVersion expVer
+              | expVer == num -> persistEvents
+              | otherwise     -> STM.throwSTM $ ExpectedVersionException ver
+                                              $ ExactVersion num
 
   readBatch StubStore{..} name (Batch start _) = liftBase $ async $ STM.atomically $ do
     streamMap <- STM.readTVar _streams
@@ -194,7 +197,7 @@ instance Store StubStore where
         let events = S.filter ((>= start) . eventNumber) $ streamEvents stream
             slice = Slice { sliceEvents = toList events
                           , sliceEndOfStream = True
-                          , sliceNextEventNumber = streamNextNumber stream
+                          , sliceNextEventNumber = streamNumber stream
                           }
 
         return $ ReadSuccess slice
