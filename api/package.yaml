@@ -26,6 +26,9 @@ library:
     - text
     - bytestring
     - string-conversions
+    - stm-chans
+    - stm
+    - monad-loops ==0.4.*
   source-dirs: library
 license: BSD3
 license-file: LICENSE.md

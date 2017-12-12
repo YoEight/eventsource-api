@@ -30,6 +30,7 @@ module EventSource.Aggregate
   , submitCmd
   , submitEvt
   , snapshot
+  , closeAgg
   , execute
   -- * Internal
   , Action'(..)
@@ -43,14 +44,17 @@ module EventSource.Aggregate
   ) where
 
 --------------------------------------------------------------------------------
-import Control.Monad (ap,forever)
+import Control.Monad (ap)
 import Data.Foldable (for_, traverse_)
 
 --------------------------------------------------------------------------------
 import           Control.Concurrent.Async.Lifted (wait)
 import qualified Control.Concurrent.Lifted as Concurrent
+import           Control.Concurrent.STM (atomically)
+import qualified Control.Concurrent.STM.TBMQueue as Queue
 import           Control.Monad.Base (MonadBase, liftBase)
 import           Control.Monad.Except (runExceptT)
+import           Control.Monad.Loops (whileJust_)
 import           Control.Monad.Trans (MonadTrans(..))
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Data.IORef.Lifted (newIORef, readIORef, writeIORef)
@@ -181,18 +185,19 @@ data AggState a =
 --  resulting event. An aggregate is only responsible of its own stream.
 data Agg a where
   Agg :: AggEnv a
+      -> M a ()
       -> (forall r. Action a r -> (r -> M a ()) -> M a ())
       -> Agg a
 
 --------------------------------------------------------------------------------
 -- | Returns an aggregate id.
 aggId :: Agg a -> Id a
-aggId (Agg env _) = aggEnvId env
+aggId (Agg env _ _) = aggEnvId env
 
 --------------------------------------------------------------------------------
 -- | Executes an action on an aggregate.
 runAgg :: Agg a -> Action a r -> (r -> M a ()) -> M a ()
-runAgg (Agg _ k) = k
+runAgg (Agg _ _ k) = k
 
 --------------------------------------------------------------------------------
 -- | Holds an existantially quantified action so it can passed around easily
@@ -209,18 +214,21 @@ newAgg :: (Aggregate a, MonadBaseControl IO (M a))
        -> a
        -> M a (Agg a)
 newAgg store aId seed = do
-  let env = AggEnv store aId
-  ref  <- newIORef (AggState AnyVersion seed)
-  chan <- Concurrent.newChan
-  _    <- Concurrent.fork $ forever $ do
-    Msg action k <- Concurrent.readChan chan
-    s            <- readIORef ref
-    runAction action env s $ \s' r -> do
-      writeIORef ref s'
-      k r
+  queue <- liftBase $ Queue.newTBMQueueIO 500 -- Max parked messages.
+  ref   <- newIORef (AggState AnyVersion seed)
 
-  pure $ Agg env $ \action k ->
-    Concurrent.writeChan chan (Msg action k)
+  let takeFromQueue  = liftBase $ atomically $ Queue.readTBMQueue queue
+      closeAggThread = liftBase $ atomically $ Queue.closeTBMQueue queue
+      env            = AggEnv store aId
+
+  _ <- Concurrent.fork $ whileJust_ takeFromQueue $ \(Msg action k) ->
+         do s <- readIORef ref
+            runAction action env s $ \s' r -> do
+              writeIORef ref s'
+              k r
+
+  pure $ Agg env closeAggThread $ \action k ->
+    liftBase $ atomically $ Queue.writeTBMQueue queue (Msg action k)
 
 --------------------------------------------------------------------------------
 -- | Creates an aggregate and replays its entire stream to rebuild its
@@ -233,6 +241,12 @@ loadAgg :: (Aggregate a, StreamId (Id a), DecodeEvent (Evt a), MonadBaseControl 
 loadAgg store aId seed = do
   agg <- newAgg store aId seed
   res <- execute agg (loadEventsAction aId)
+
+  -- We don't need to let a running thread for nothing if we couldn't load the
+  -- aggregate properly.
+  case res of
+    Left _ -> closeAgg agg
+    _      -> pure ()
 
   pure (agg <$ res)
 
@@ -278,7 +292,7 @@ execute agg action = do
   Concurrent.takeMVar var
 
 --------------------------------------------------------------------------------
--- | Persist an event to the eventstore.
+-- | Persists an event to the eventstore.
 persist :: (StreamId id, EncodeEvent event, MonadBase IO m)
         => SomeStore
         -> id
@@ -287,6 +301,11 @@ persist :: (StreamId id, EncodeEvent event, MonadBase IO m)
         -> m EventNumber
 persist store aid ver event =
   liftBase (appendEvent store (toStreamName aid) ver event >>= wait)
+
+--------------------------------------------------------------------------------
+-- | Closes internal aggregate state.
+closeAgg :: Agg a -> M a ()
+closeAgg (Agg _ action _) = action
 
 --------------------------------------------------------------------------------
 -- // Internal commands.
