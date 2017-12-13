@@ -48,7 +48,7 @@ module EventSource.Store
 
 --------------------------------------------------------------------------------
 import Control.Monad (MonadPlus, mzero)
-import Control.Exception (Exception, SomeException, toException)
+import Control.Exception (Exception, SomeException, toException, throwIO)
 import Data.Bifunctor (first)
 import Data.Foldable (for_)
 import Data.Int (Int32)
@@ -57,7 +57,6 @@ import Data.Traversable (for)
 --------------------------------------------------------------------------------
 import Control.Concurrent.Async.Lifted (Async, async, wait)
 import Control.Monad.Base (MonadBase, liftBase)
-import Control.Monad.Catch (MonadThrow, throwM)
 import Control.Monad.Except (ExceptT, runExceptT, mapExceptT, throwError)
 import Control.Monad.State (get, put, evalStateT)
 import Control.Monad.Trans (lift)
@@ -360,9 +359,9 @@ foldSavedEvents store stream k seed =
 
 --------------------------------------------------------------------------------
 -- | Throws an exception in case 'ExceptT' was a 'Left'.
-unhandled :: (MonadThrow m, Exception e) => ExceptT e m a -> m a
+unhandled :: (MonadBase IO m, Exception e) => ExceptT e m a -> m a
 unhandled m = runExceptT m >>= \case
-  Left e  -> throwM e
+  Left e  -> liftBase $ throwIO e
   Right a -> pure a
 
 --------------------------------------------------------------------------------
