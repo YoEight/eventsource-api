@@ -21,6 +21,7 @@ module EventSource.Aggregate.Simple
   , loadOrCreateAgg
   , submitCmd
   , submitEvt
+  , closeAgg
   , snapshot
   ) where
 
@@ -133,3 +134,8 @@ snapshot :: AggIO id command event state -> IO state
 snapshot agg = do
   Simple a <- Self.snapshot agg
   pure a
+
+--------------------------------------------------------------------------------
+-- | Closes internal aggregate state.
+closeAgg :: AggIO id command event state -> IO ()
+closeAgg agg = Self.closeAgg agg
