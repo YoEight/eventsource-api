@@ -23,6 +23,7 @@ module EventSource.Aggregate.Simple
   , submitEvt
   , closeAgg
   , snapshot
+  , route
   ) where
 
 --------------------------------------------------------------------------------
@@ -139,3 +140,14 @@ snapshot agg = do
 -- | Closes internal aggregate state.
 closeAgg :: AggIO id command event state -> IO ()
 closeAgg agg = Self.closeAgg agg
+
+--------------------------------------------------------------------------------
+-- | Uses usually by Root aggregates which usually have unusual workflow and
+--  make great use of a CPS-ed computation.
+--   http://blog.sapiensworks.com/post/2016/07/14/DDD-Aggregate-Decoded-1
+route :: AggIO id command event state
+      -> (SomeStore -> state -> (state -> r -> IO ()) -> IO ())
+      -> IO r
+route agg k = Self.route agg $ \store (Simple state) resp ->
+  k store state (\state' -> resp (Simple state'))
+

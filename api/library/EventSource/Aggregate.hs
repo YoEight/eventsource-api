@@ -30,6 +30,7 @@ module EventSource.Aggregate
   , submitCmd
   , submitEvt
   , snapshot
+  , route
   , closeAgg
   , execute
   -- * Internal
@@ -298,6 +299,16 @@ snapshot :: MonadBase IO (M a) => Agg a -> M a a
 snapshot agg = execute agg snapshotAction
 
 --------------------------------------------------------------------------------
+-- | Uses usually by Root aggregates which usually have unusual workflow and
+--  make great use of a CPS-ed computation.
+--   http://blog.sapiensworks.com/post/2016/07/14/DDD-Aggregate-Decoded-1
+route :: MonadBase IO (M a)
+      => Agg a
+      -> (SomeStore -> a -> (a -> r -> M a ()) -> M a ())
+      -> M a r
+route agg k = execute agg (routeAction k)
+
+--------------------------------------------------------------------------------
 -- | Executes an action.
 execute :: MonadBase IO (M a) => Agg a -> Action a r -> M a r
 execute agg action = do
@@ -376,3 +387,13 @@ loadEventsAction aId = do
 
   traverse_ putState res
   pure (fmap aggState res)
+
+--------------------------------------------------------------------------------
+routeAction :: (SomeStore -> a -> (a -> r -> M a ()) -> M a ())
+            -> Action a r
+routeAction k = Action' $ \env s resp -> do
+  k (aggEnvStore env) (aggState s) $ \a r ->
+    let s' = s { aggState = a } in
+    resp s' r
+
+
