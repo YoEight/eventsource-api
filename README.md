@@ -8,10 +8,11 @@ We use [stack][] to build project under this repository.
 
 ```sh
 # Build the code
-$ stack --stack-yaml=stack-all.yaml build
+$ stack build
 
 # Test the code
-$ stack --stack-yaml=stack-all.yaml test
+# (GetEventStore store implementation will require a running GetEventStore server on 1113 port)
+$ stack test
 ```
 
 ## About testing
