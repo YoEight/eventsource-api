@@ -2,7 +2,7 @@
 # Cabal file when you run `stack build`. See the hpack website for help with
 # this file: <https://github.com/sol/hpack>.
 category: Eventsourcing
-description: Please read README.md.
+description: A high-level eventsourcing library.
 extra-source-files:
 - CHANGELOG.md
 - LICENSE.md
@@ -36,4 +36,4 @@ author: Yorick Laupa
 maintainer: yo.eight@gmail.com
 name: eventsource-api
 synopsis: Provides an eventsourcing high level API.
-version: '1.1.1'
+version: '1.2.0'

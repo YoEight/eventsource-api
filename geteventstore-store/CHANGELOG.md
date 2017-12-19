@@ -1,3 +1,7 @@
+1.0.5
+=====
+* Dependencies cleaning.
+
 1.0.4
 =====
 * Fix Stackage build.

@@ -1,3 +1,7 @@
+1.2.0
+=====
+  * Introduce Aggregate API.
+
 1.1.1
 =====
   * Fix GHC 8.2.1 and Stackage LTS-9 build.
