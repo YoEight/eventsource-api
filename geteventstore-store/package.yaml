@@ -13,7 +13,7 @@ github: YoEight/eventsource-api
 library:
   dependencies:
   - base >=4.9 && <5
-  - eventstore >=0.14 && <0.16
+  - eventstore >=0.14 && <1.1
   - eventsource-api >= 1.1
   - aeson
   - mtl
@@ -23,7 +23,7 @@ library:
 license: BSD3
 license-file: LICENSE.md
 author: Yorick Laupa
-maintainer: yo.eight@gmail.comm
+maintainer: yo.eight@gmail.com
 name: eventsource-geteventstore-store
 synopsis: GetEventStore store implementation.
 tests:
@@ -43,4 +43,4 @@ tests:
     - -with-rtsopts=-N
     main: Main.hs
     source-dirs: test-suite
-version: '1.0.5'
+version: '1.0.6'
