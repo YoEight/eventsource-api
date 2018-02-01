@@ -221,7 +221,8 @@ specification store = do
     got `shouldBe` events
 
   specify "API/Aggregate - submit event" $ do
-    agg <- Simple.newAgg (toStore store) (TestId "submit:event") (Test 0)
+    StreamName name <- freshStreamName
+    agg <- Simple.newAgg (toStore store) (TestId name) (Test 0)
     let events = replicate 10 (TestEvent 1)
 
     traverse_ (Simple.submitEvt agg) events
@@ -230,7 +231,8 @@ specification store = do
     got `shouldBe` Test 10
 
   specify "API/Aggregate - submit commands" $ do
-    agg <- Simple.newAgg (toStore store) (TestId "submit:command") (Test 0)
+    StreamName name <- freshStreamName
+    agg <- Simple.newAgg (toStore store) (TestId name) (Test 0)
 
     res1 <- Simple.submitCmd agg (TestIncr 1)
     let go1 (Right evt) = evt == TestEvent 1
@@ -246,7 +248,8 @@ specification store = do
     res2 `shouldSatisfy` go2
 
   specify "API/Aggregate - loading" $ do
-    agg1 <- Simple.newAgg (toStore store) (TestId "submit:load") (Test 0)
+    StreamName name <- freshStreamName
+    agg1 <- Simple.newAgg (toStore store) (TestId name) (Test 0)
 
     let commands = replicate 10 (TestIncr 1)
 
@@ -255,7 +258,7 @@ specification store = do
     res1 <- Simple.snapshot agg1
     res1 `shouldBe` Test 10
 
-    outcome <- Simple.loadAgg (toStore store) (TestId "submit:load") (Test 0)
+    outcome <- Simple.loadAgg (toStore store) (TestId name) (Test 0)
 
     case outcome of
       Left{}     -> error "We should be able to load an aggregate."
