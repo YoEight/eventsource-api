@@ -1,3 +1,7 @@
+1.0.6
+=====
+* Support evenstore >= 1.1
+
 1.0.5
 =====
 * Dependencies cleaning.

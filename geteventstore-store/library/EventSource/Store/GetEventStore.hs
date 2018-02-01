@@ -132,15 +132,17 @@ instance Store GetEventStore where
   appendEvents (GetEventStore conn) name ver xs = liftBase $ do
     events <- traverse makeEvent xs
     w <- GES.sendEvents conn (toGESStreamName name) (toGesExpVer ver) events
+          Nothing
     return $ fmap (EventNumber . GES.writeNextExpectedVersion) w
 
   readBatch (GetEventStore conn) name b = liftBase $ do
     let EventNumber n = batchFrom b
-    w <- GES.readStreamEventsForward conn (toGESStreamName name) n (batchSize b) True
+    w <- GES.readStreamEventsForward conn (toGESStreamName name) n (batchSize b)
+          True Nothing
     return $ fmap (fmap fromGesSlice . fromGesReadResult name) w
 
   subscribe (GetEventStore conn) name = liftBase $ do
-    sub <- GES.subscribe conn (toGESStreamName name) True
+    sub <- GES.subscribe conn (toGESStreamName name) True Nothing
     sid <- freshSubscriptionId
 
     return $ Subscription sid $ liftBase $
