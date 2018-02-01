@@ -19,7 +19,7 @@ import Control.Exception (Exception)
 import Control.Monad (MonadPlus, mzero)
 import Data.Bifunctor (first)
 import Data.Foldable (foldlM)
-import Data.Int (Int32)
+import Data.Int (Int64)
 import Data.String (IsString(..))
 import Data.String.Conversions (convertString)
 
@@ -235,7 +235,7 @@ data Event =
 
 --------------------------------------------------------------------------------
 -- | Represents an event index in a stream.
-newtype EventNumber = EventNumber Int32
+newtype EventNumber = EventNumber Int64
   deriving (Eq, Ord, Num, Enum, Show, FromJSON, ToJSON)
 
 --------------------------------------------------------------------------------

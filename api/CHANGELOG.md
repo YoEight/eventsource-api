@@ -1,3 +1,7 @@
+1.3.0
+=====
+  * Move `EventNumber` to `Int64`.
+
 1.2.0
 =====
   * Introduce Aggregate API.
