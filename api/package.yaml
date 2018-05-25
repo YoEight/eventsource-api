@@ -36,4 +36,4 @@ author: Yorick Laupa
 maintainer: yo.eight@gmail.com
 name: eventsource-api
 synopsis: Provides an eventsourcing high level API.
-version: '1.3.0'
+version: '1.3.1'

@@ -20,6 +20,7 @@ import Control.Monad (MonadPlus, mzero)
 import Data.Bifunctor (first)
 import Data.Foldable (foldlM)
 import Data.Int (Int64)
+import Data.Semigroup (Semigroup)
 import Data.String (IsString(..))
 import Data.String.Conversions (convertString)
 
@@ -111,11 +112,7 @@ dataAsParse dat k = dataAsParsing dat $ JsonParsing k
 -- | Used to store a set a properties. One example is to be used as 'Event'
 --   metadata.
 newtype Properties = Properties (Map.Map Text Text)
-
---------------------------------------------------------------------------------
-instance Monoid Properties where
-  mempty = Properties mempty
-  mappend (Properties a) (Properties b) = Properties $ mappend a b
+  deriving (Semigroup, Monoid)
 
 --------------------------------------------------------------------------------
 instance Show Properties where

@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: nightly-2017-10-28
+resolver: nightly-2018-05-15
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -42,9 +42,12 @@ packages:
 - stub-store/
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps: [ eventstore-1.1.1
-            , dns-3.0.1
-            ]
+extra-deps:
+  - eventstore-1.1.4
+  - dns-3.0.4
+  - protobuf-0.2.1.2
+  - tasty-hspec-1.1.4
+  - tasty-quickcheck-0.9.2
 
 # Override default flag values for local packages and extra-deps
 flags: {}

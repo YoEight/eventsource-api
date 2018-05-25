@@ -1,3 +1,7 @@
+1.3.1
+=====
+  * Fix GHC 8.4 build.
+
 1.3.0
 =====
   * Move `EventNumber` to `Int64`.
