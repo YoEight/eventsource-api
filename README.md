@@ -1,3 +1,10 @@
+
+# We changed home!
+
+**The project is now hosted on https://gitlab.com/YoEight/eventsource-api-hs**
+
+**This repository is left as-is for backward-compability. We will no longer take issue or PR here**
+
 # Haskell Eventsourcing
 
 Home of an attempt to formalize eventsourcing.
